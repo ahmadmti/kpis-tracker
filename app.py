@@ -8,18 +8,6 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="KPIs Tracker")
 
-# Permission Helper
-def check_permission(required_perm: models.PermissionType):
-    def permission_checker(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
-        has_perm = db.query(models.RolePermission).filter(
-            models.RolePermission.role_id == current_user.role_id,
-            models.RolePermission.permission_name == required_perm.value
-        ).first()
-        if not has_perm:
-            raise HTTPException(status_code=403, detail="Forbidden")
-        return current_user
-    return permission_checker
-
 @app.get("/bootstrap")
 def bootstrap_system(db: Session = Depends(get_db)):
     """Sets up the initial Admin role and permissions"""
@@ -39,6 +27,19 @@ def bootstrap_system(db: Session = Depends(get_db)):
         db.add(new_p)
     db.commit()
     return {"message": "Admin role and permissions created successfully!"}
+
+# Permission Helper
+def check_permission(required_perm: models.PermissionType):
+    def permission_checker(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+        has_perm = db.query(models.RolePermission).filter(
+            models.RolePermission.role_id == current_user.role_id,
+            models.RolePermission.permission_name == required_perm.value
+        ).first()
+        if not has_perm:
+            raise HTTPException(status_code=403, detail="Forbidden")
+        return current_user
+    return permission_checker
+
 
 @app.post("/token", response_model=schemas.Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
