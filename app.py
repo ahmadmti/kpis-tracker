@@ -6,7 +6,7 @@ import models, schemas, auth
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Enterprise System")
+app = FastAPI(title="KPIs Tracker")
 
 # Permission Helper
 def check_permission(required_perm: models.PermissionType):
@@ -22,15 +22,18 @@ def check_permission(required_perm: models.PermissionType):
 
 @app.get("/bootstrap")
 def bootstrap_system(db: Session = Depends(get_db)):
-    """Visit this once at https://your-url.onrender.com/bootstrap to set up Admin"""
+    """Sets up the initial Admin role and permissions"""
+    # Check if Admin already exists
     if db.query(models.Role).filter(models.Role.name == "Admin").first():
         return {"message": "Already bootstrapped"}
     
+    # Create the Admin Role
     admin_role = models.Role(name="Admin", description="Full Access")
     db.add(admin_role)
     db.commit()
     db.refresh(admin_role)
     
+    # Link all permissions to this Admin role
     for perm in models.PermissionType:
         new_p = models.RolePermission(role_id=admin_role.id, permission_name=perm.value)
         db.add(new_p)
