@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 
 # Constants
-API_URL = "http://127.0.0.1:8000"
+API_URL = "https://kpis-tracker-bg.onrender.com"
 
 st.set_page_config(
     page_title="System Dashboard",
