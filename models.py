@@ -1,30 +1,35 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
 from database import Base
 
-class UserRole(int, enum.Enum):
-    ADMIN = 1
-    MANAGER = 2
-    EMPLOYEE = 3
+class PermissionType(str, enum.Enum):
+    USER_CREATE = "user:create"
+    USER_READ = "user:read"
+    SYSTEM_CONFIG = "system:config"
+
+class Role(Base):
+    __tablename__ = "roles"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, nullable=False)
+    description = Column(String, nullable=True)
+    permissions = relationship("RolePermission", back_populates="role")
+
+class RolePermission(Base):
+    __tablename__ = "role_permissions"
+    id = Column(Integer, primary_key=True, index=True)
+    role_id = Column(Integer, ForeignKey("roles.id"), nullable=False)
+    permission_name = Column(String, nullable=False)
+    role = relationship("Role", back_populates="permissions")
 
 class User(Base):
     __tablename__ = "users"
-
     id = Column(Integer, primary_key=True, index=True)
     full_name = Column(String, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
-    
-    # Storing Enum as Integer for role_id
-    role_id = Column(Integer, nullable=False, default=UserRole.EMPLOYEE.value)
-    
-    # Self-referential foreign key for manager
+    role_id = Column(Integer, ForeignKey("roles.id"), nullable=True) # Changed to nullable for bootstrap
     manager_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    # Relationships
-    manager = relationship("User", remote_side=[id], backref="subordinates")
