@@ -104,7 +104,7 @@ def check_circular_reference(db: Session, user_id: int, proposed_manager_id: int
         manager = db.query(models.User).filter(models.User.id == current_m_id).first()
         current_m_id = manager.manager_id if manager else None
 
-@app.get("/users/{user_id}/team", response_model=TeamMemberOut)
+@app.get("/users/{user_id}/team", response_model=schemas.TeamMemberOut)
 def get_user_team(
     user_id: int, 
     db: Session = Depends(get_db),
