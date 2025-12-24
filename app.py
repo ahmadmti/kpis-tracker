@@ -8,6 +8,16 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="KPIs Tracker")
 
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # In production, replace with your specific IP
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 @app.get("/bootstrap")
 def bootstrap_system(db: Session = Depends(get_db)):
     """Sets up the initial Admin role and permissions"""
