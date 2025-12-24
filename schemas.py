@@ -39,3 +39,11 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     email: Optional[str] = None
+
+# THIS IS THE MISSING PIECE
+class UserOut(UserBase):
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True # Allows Pydantic to read SQLAlchemy models
