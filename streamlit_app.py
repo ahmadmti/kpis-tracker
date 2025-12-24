@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 
 # --- Configuration ---
-API_URL = "https://kpis-tracker-bg.onrender.com"
+API_URL = "https://13.61.15.68:8000"
 
 st.set_page_config(page_title="KPI Tracker | Secure Login", layout="centered")
 
