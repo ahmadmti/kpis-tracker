@@ -89,3 +89,48 @@ def list_users(
         raise HTTPException(status_code=403, detail="Not enough permissions")
         
     return db.query(models.User).all()
+
+def check_circular_reference(db: Session, user_id: int, proposed_manager_id: int):
+    """Senior Logic: Ensure the manager is not a subordinate of the user."""
+    if user_id == proposed_manager_id:
+        raise HTTPException(status_code=400, detail="User cannot manage themselves.")
+    
+    current_m_id = proposed_manager_id
+    while current_m_id is not None:
+        if current_m_id == user_id:
+            raise HTTPException(status_code=400, detail="Circular reporting detected.")
+        
+        # Move up the chain
+        manager = db.query(models.User).filter(models.User.id == current_m_id).first()
+        current_m_id = manager.manager_id if manager else None
+
+@app.get("/users/{user_id}/team", response_model=TeamMemberOut)
+def get_user_team(
+    user_id: int, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Fetch the entire hierarchy starting from a specific user."""
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+@app.put("/users/{user_id}/manager")
+def update_manager(
+    user_id: int, 
+    manager_id: Optional[int], 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Safely update a user's manager with circular reporting protection."""
+    if current_user.role_id != 1: # Admin only
+        raise HTTPException(status_code=403, detail="Only admins can change hierarchy")
+        
+    if manager_id:
+        check_circular_reference(db, user_id, manager_id)
+        
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    db_user.manager_id = manager_id
+    db.commit()
+    return {"message": "Hierarchy updated successfully"}

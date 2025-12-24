@@ -31,5 +31,8 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     role_id = Column(Integer, ForeignKey("roles.id"), nullable=True) # Changed to nullable for bootstrap
     manager_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    manager = relationship("User", remote_side=[id], backref="subordinates")
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # Hierarchy Field
+    # Relationships

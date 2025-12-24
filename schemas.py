@@ -47,3 +47,10 @@ class UserOut(UserBase):
 
     class Config:
         from_attributes = True # Allows Pydantic to read SQLAlchemy models
+
+# Recursive schema for team members
+class TeamMemberOut(UserOut):
+    subordinates: List["TeamMemberOut"] = []
+
+    class Config:
+        from_attributes = True
