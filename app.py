@@ -28,6 +28,18 @@ def bootstrap_system(db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Admin role and permissions created successfully!"}
 
+@app.get("/users/", response_model=list[schemas.UserOut])
+def list_users(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Admin Only: List all registered users"""
+    # Check if the requester is an Admin (Module 3 Logic)
+    if current_user.role_id != 1:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+        
+    return db.query(models.User).all()
+
 # Permission Helper
 def check_permission(required_perm: models.PermissionType):
     def permission_checker(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
