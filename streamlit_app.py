@@ -58,59 +58,87 @@ if not st.session_state.token:
                 st.error("System Error: Could not reach server.")
     st.stop()
 
-# --- 5. Logged-in Dashboard Logic (Module 13) ---
+# --- 5. Logged-in Navigation Logic ---
 headers = {"Authorization": f"Bearer {st.session_state.token}"}
 
-# Fetch Role and User ID from /users/me
 try:
     user_me = requests.get(f"{API_URL}/users/me", headers=headers).json()
     role_id = user_me["role_id"]
     user_id = user_me["id"]
     full_name = user_me["full_name"]
-except:
-    st.error("Could not fetch user profile.")
+except Exception as e:
+    st.error(f"Could not fetch user profile: {e}")
     st.stop()
 
-st.title(f"📈 {full_name}'s Dashboard")
+# --- SIDEBAR NAVIGATION ---
+st.sidebar.title("📌 Navigation")
+
+# Define menu options based on Role ID (1=Admin, 2=Manager, 3=User)
+menu_options = ["🏠 Dashboard", "🏆 Achievements"]
+
+if role_id in [1, 2]:
+    menu_options.append("👥 Team Performance")
+
+if role_id == 1:
+    menu_options.append("⚙️ KPI Administration")
+    menu_options.append("📜 Audit Logs")
+
+selection = st.sidebar.radio("Go to", menu_options)
+
+# --- PAGE ROUTING ---
+st.title(f"{selection}")
 now = datetime.now()
 
-# --- ROLE-BASED VIEWS ---
+# 1. DASHBOARD PAGE
+if selection == "🏠 Dashboard":
+    if role_id == 1:
+        st.subheader("🏢 Enterprise Overview")
+        res = requests.get(f"{API_URL}/reports/dashboard", headers=headers)
+        if res.status_code == 200:
+            data = res.json()
+            col1, col2 = st.columns(2)
+            col1.metric("Company Avg Score", f"{data['average_score']}%")
+            col2.download_button("📥 Export Excel Report", 
+                                data=requests.get(f"{API_URL}/reports/export?format=excel", headers=headers).content,
+                                file_name="company_report.xlsx")
+            
+            df = pd.DataFrame(data['user_scores'])
+            st.bar_chart(df.set_index("full_name")["total_weighted_score"])
+            st.table(df)
+    else:
+        st.subheader(f"Personal Performance: {full_name}")
+        res = requests.get(f"{API_URL}/users/{user_id}/score?month={now.month}&year={now.year}", headers=headers)
+        if res.status_code == 200:
+            score = res.json()["total_weighted_score"]
+            st.metric("My Performance Score", f"{score}%")
+            st.progress(score / 100 if score <= 100 else 1.0)
+            if score >= 90: st.success("Keep up the great work!")
 
-# VIEW A: ADMIN (Role 1)
-if role_id == 1:
-    st.header("🏢 Admin Enterprise Overview")
-    res = requests.get(f"{API_URL}/reports/dashboard", headers=headers)
-    if res.status_code == 200:
-        data = res.json()
-        col1, col2 = st.columns(2)
-        col1.metric("Company Avg Score", f"{data['average_score']}%")
-        col2.download_button("📥 Download Excel Report", 
-                            data=requests.get(f"{API_URL}/reports/export?format=excel", headers=headers).content,
-                            file_name="company_report.xlsx")
-        
-        df = pd.DataFrame(data['user_scores'])
-        st.bar_chart(df.set_index("full_name")["total_weighted_score"])
-        st.table(df)
+# 2. ACHIEVEMENTS PAGE (Placeholder for UI Module 2)
+elif selection == "🏆 Achievements":
+    st.subheader("My Submissions")
+    st.info("Coming Soon: You will be able to log new achievements and upload evidence here.")
 
-# VIEW B: MANAGER (Role 2)
-elif role_id == 2:
-    st.header("👥 Team Management Dashboard")
-    # Managers see their own score first
-    my_score_res = requests.get(f"{API_URL}/users/{user_id}/score?month={now.month}&year={now.year}", headers=headers)
-    if my_score_res.status_code == 200:
-        st.subheader("My Performance")
-        st.metric("Personal Score", f"{my_score_res.json()['total_weighted_score']}%")
-    
-    st.divider()
-    st.subheader("My Direct Reports")
-    st.info("Logic: This section will list your team members' scores once they are assigned to you in the User table.")
-    # In a future module, we can add a specific /reports/team endpoint here
+# 3. TEAM PERFORMANCE PAGE
+elif selection == "👥 Team Performance":
+    st.subheader("Team Progress Tracking")
+    if role_id not in [1, 2]:
+        st.error("Access Denied")
+    else:
+        st.write("List of direct reports and their monthly status will appear here.")
 
-# VIEW C: USER (Role 3)
-else:
-    st.header("🎯 My Performance Progress")
-    res = requests.get(f"{API_URL}/users/{user_id}/score?month={now.month}&year={now.year}", headers=headers)
-    if res.status_code == 200:
-        score = res.json()["total_weighted_score"]
-        st.metric("Current Month Score", f"{score}%")
-        st.progress(score / 100 if score <= 100 else 1.0)
+# 4. KPI ADMINISTRATION PAGE
+elif selection == "⚙️ KPI Administration":
+    st.subheader("Manage Global KPIs")
+    if role_id != 1:
+        st.error("Admin Only")
+    else:
+        st.write("Tools to create/edit KPIs and set weightages.")
+
+# 5. AUDIT LOGS PAGE
+elif selection == "📜 Audit Logs":
+    st.subheader("System Activity Feed")
+    if role_id != 1:
+        st.error("Admin Only")
+    else:
+        st.write("View the immutable record of all system actions.")
