@@ -84,6 +84,7 @@ class Achievement(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     kpi_id = Column(Integer, ForeignKey("kpis.id"), nullable=False)
+    verifier_id = Column(Integer, ForeignKey("users.id"), nullable=True) # <--- Must be above the relationship
     achieved_value = Column(Float, nullable=False) # Must be >= 0
     description = Column(String)
     evidence_url = Column(String) # URL to proof
