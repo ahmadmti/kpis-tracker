@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Float, Enum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Float, Enum, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -99,3 +99,30 @@ class Achievement(Base):
     verifier_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     verified_at = Column(DateTime, nullable=True)
     rejection_reason = Column(String, nullable=True)
+
+class ActionType(str, enum.Enum):
+    CREATE = "CREATE"
+    UPDATE = "UPDATE"
+    DELETE = "DELETE"
+    VERIFY = "VERIFY"
+    LOGIN = "LOGIN"
+
+class EntityType(str, enum.Enum):
+    USER = "USER"
+    KPI = "KPI"
+    ACHIEVEMENT = "ACHIEVEMENT"
+    OVERRIDE = "OVERRIDE"
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True) # Nullable for system actions
+    action_type = Column(Enum(ActionType), nullable=False)
+    entity_type = Column(Enum(EntityType), nullable=False)
+    entity_id = Column(Integer, nullable=True) # ID of the record changed
+    description = Column(String, nullable=False)
+    metadata_json = Column(JSON, nullable=True) # Stores extra details as a dictionary
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user = relationship("User")

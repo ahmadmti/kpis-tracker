@@ -7,6 +7,7 @@ from database import engine, Base, get_db
 import models, schemas, auth
 from datetime import datetime, timezone
 import services
+import audit
 
 Base.metadata.create_all(bind=engine)
 
@@ -269,6 +270,14 @@ def verify_achievement(
         achievement.rejection_reason = data.rejection_reason
 
     db.commit()
+    audit.log_action(
+        db, 
+        user_id=current_user.id, 
+        action=models.ActionType.VERIFY, 
+        entity=models.EntityType.ACHIEVEMENT,
+        entity_id=achievement.id,
+        description=f"Achievement {data.status} for user {achievement.user_id}"
+    )
     return {"message": f"Achievement successfully {data.status}"}
 
 @app.get("/users/{user_id}/score")
