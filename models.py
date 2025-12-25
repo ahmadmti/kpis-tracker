@@ -3,6 +3,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
 from database import Base
+from datetime import datetime
 
 class PermissionType(str, enum.Enum):
     USER_CREATE = "user:create"
@@ -70,4 +71,25 @@ class KPIOverride(Base):
     
     # Relationships for easy lookup
     user = relationship("User", backref="overrides")
+    kpi = relationship("KPI")
+
+class AchievementStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    VERIFIED = "VERIFIED"
+    REJECTED = "REJECTED"
+
+class Achievement(Base):
+    __tablename__ = "achievements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    kpi_id = Column(Integer, ForeignKey("kpis.id"), nullable=False)
+    achieved_value = Column(Float, nullable=False) # Must be >= 0
+    description = Column(String)
+    evidence_url = Column(String) # URL to proof
+    achievement_date = Column(DateTime, default=datetime.utcnow)
+    status = Column(Enum(AchievementStatus), default=AchievementStatus.PENDING)
+
+    # Relationships
+    user = relationship("User")
     kpi = relationship("KPI")

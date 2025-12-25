@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from typing import Optional, List
 from database import engine, Base, get_db
 import models, schemas, auth
+from datetime import datetime
 
 
 Base.metadata.create_all(bind=engine)
@@ -199,3 +200,36 @@ def create_kpi_override(
     db.commit()
     db.refresh(db_override)
     return db_override
+
+@app.post("/achievements/", response_model=schemas.AchievementOut)
+def log_achievement(
+    achievement: schemas.AchievementCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Senior Logic: Log KPI progress with current-period validation."""
+    
+    # 1. Period Validation: Ensure achievement_date is within current month/year
+    now = datetime.utcnow()
+    if achievement.achievement_date.month != now.month or \
+       achievement.achievement_date.year != now.year:
+        raise HTTPException(
+            status_code=400, 
+            detail="Achievements must be logged within the current month/period."
+        )
+
+    # 2. Verify KPI exists
+    kpi_exists = db.query(models.KPI).filter(models.KPI.id == achievement.kpi_id).first()
+    if not kpi_exists:
+        raise HTTPException(status_code=404, detail="KPI ID not found.")
+
+    # 3. Save Entry (Status defaults to PENDING)
+    db_achievement = models.Achievement(
+        **achievement.model_dump(),
+        user_id=current_user.id
+    )
+    
+    db.add(db_achievement)
+    db.commit()
+    db.refresh(db_achievement)
+    return db_achievement

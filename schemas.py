@@ -1,7 +1,8 @@
 from pydantic import BaseModel, EmailStr, field_validator, Field
 from typing import Optional, List
 from datetime import datetime
-from models import PermissionType, MeasurementType, PeriodType
+from models import PermissionType, MeasurementType, PeriodType, AchievementStatus
+
 
 class UserBase(BaseModel):
     email: EmailStr
@@ -81,6 +82,22 @@ class KPIOverrideCreate(BaseModel):
 
 class KPIOverrideOut(KPIOverrideCreate):
     id: int
+
+    class Config:
+        from_attributes = True
+
+
+class AchievementCreate(BaseModel):
+    kpi_id: int
+    achieved_value: float = Field(..., ge=0)
+    description: str
+    evidence_url: Optional[str] = None
+    achievement_date: datetime = Field(default_factory=datetime.utcnow)
+
+class AchievementOut(AchievementCreate):
+    id: int
+    user_id: int
+    status: AchievementStatus
 
     class Config:
         from_attributes = True
