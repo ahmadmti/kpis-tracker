@@ -61,6 +61,11 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     if not user or not auth.verify_password(form_data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     access_token = auth.create_access_token(data={"sub": user.email})
+    audit.log_action(
+        db, user_id=user.id, action=models.ActionType.LOGIN, 
+        entity=models.EntityType.USER, entity_id=user.id, 
+        description="User logged in successfully"
+    )
     return {"access_token": access_token, "token_type": "bearer"}
 
 @app.post("/users/", response_model=schemas.UserResponse)
@@ -169,7 +174,11 @@ def create_kpi(
     
     # Audit Log (Passive)
     # log_action(db, current_user.id, "KPI_CREATED", f"Created KPI {db_kpi.id}")
-    
+    audit.log_action(
+        db, user_id=current_user.id, action=models.ActionType.CREATE, 
+        entity=models.EntityType.KPI, entity_id=db_kpi.id, 
+        description=f"Created KPI: {db_kpi.name}"
+    )
     return db_kpi
 
 @app.post("/kpis/overrides/", response_model=schemas.KPIOverrideOut)
@@ -233,6 +242,11 @@ def log_achievement(
     db.add(db_achievement)
     db.commit()
     db.refresh(db_achievement)
+    audit.log_action(
+        db, user_id=current_user.id, action=models.ActionType.CREATE, 
+        entity=models.EntityType.ACHIEVEMENT, entity_id=db_achievement.id, 
+        description=f"Submitted achievement for KPI {db_achievement.kpi_id}"
+    )
     return db_achievement
 
 @app.put("/achievements/{achievement_id}/verify")
