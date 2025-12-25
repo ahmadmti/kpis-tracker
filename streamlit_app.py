@@ -62,18 +62,21 @@ if not st.session_state.token:
 headers = {"Authorization": f"Bearer {st.session_state.token}"}
 
 try:
+    # Fetch user profile - using the logic that worked in your screenshots
     user_me = requests.get(f"{API_URL}/users/me", headers=headers).json()
-    role_id = user_me["role_id"]
-    user_id = user_me["id"]
-    full_name = user_me["full_name"]
+    
+    # Senior Tip: We use .get() to prevent the "role_id" crash if data is missing
+    role_id = user_me.get("role_id")
+    user_id = user_me.get("id")
+    full_name = user_me.get("full_name", "User")
 except Exception as e:
-    st.error(f"Could not fetch user profile: {e}")
+    st.error(f"Connection Error: {e}")
     st.stop()
 
 # --- SIDEBAR NAVIGATION ---
 st.sidebar.title("📌 Navigation")
 
-# Define menu options based on Role ID (1=Admin, 2=Manager, 3=User)
+# Define menu based on Role (1=Admin, 2=Manager, 3=User)
 menu_options = ["🏠 Dashboard", "🏆 Achievements"]
 
 if role_id in [1, 2]:
@@ -86,59 +89,46 @@ if role_id == 1:
 selection = st.sidebar.radio("Go to", menu_options)
 
 # --- PAGE ROUTING ---
-st.title(f"{selection}")
-now = datetime.now()
-
-# 1. DASHBOARD PAGE
+# This changes the content based on sidebar selection
 if selection == "🏠 Dashboard":
+    st.title(f"📈 {full_name}'s Dashboard")
+    
     if role_id == 1:
-        st.subheader("🏢 Enterprise Overview")
+        st.subheader("🏢 Admin Enterprise Overview")
+        # Fetching the dashboard report we built in Module 12
         res = requests.get(f"{API_URL}/reports/dashboard", headers=headers)
         if res.status_code == 200:
             data = res.json()
-            col1, col2 = st.columns(2)
-            col1.metric("Company Avg Score", f"{data['average_score']}%")
-            col2.download_button("📥 Export Excel Report", 
-                                data=requests.get(f"{API_URL}/reports/export?format=excel", headers=headers).content,
-                                file_name="company_report.xlsx")
+            st.metric("Company Avg Score", f"{data['average_score']}%")
             
+            # Show the chart
             df = pd.DataFrame(data['user_scores'])
-            st.bar_chart(df.set_index("full_name")["total_weighted_score"])
-            st.table(df)
+            if not df.empty:
+                st.bar_chart(df.set_index("full_name")["total_weighted_score"])
+            else:
+                st.info("No data available for this month yet.")
     else:
-        st.subheader(f"Personal Performance: {full_name}")
+        st.subheader("🎯 My Performance")
+        # Individual score logic
+        now = datetime.now()
         res = requests.get(f"{API_URL}/users/{user_id}/score?month={now.month}&year={now.year}", headers=headers)
         if res.status_code == 200:
-            score = res.json()["total_weighted_score"]
-            st.metric("My Performance Score", f"{score}%")
-            st.progress(score / 100 if score <= 100 else 1.0)
-            if score >= 90: st.success("Keep up the great work!")
+            score = res.json().get("total_weighted_score", 0)
+            st.metric("Current Score", f"{score}%")
+            st.progress(min(score/100, 1.0))
 
-# 2. ACHIEVEMENTS PAGE (Placeholder for UI Module 2)
 elif selection == "🏆 Achievements":
-    st.subheader("My Submissions")
-    st.info("Coming Soon: You will be able to log new achievements and upload evidence here.")
+    st.title("🏆 My Achievements")
+    st.info("Module 2: Achievement Submission Form will be placed here.")
 
-# 3. TEAM PERFORMANCE PAGE
 elif selection == "👥 Team Performance":
-    st.subheader("Team Progress Tracking")
-    if role_id not in [1, 2]:
-        st.error("Access Denied")
-    else:
-        st.write("List of direct reports and their monthly status will appear here.")
+    st.title("👥 Team Tracking")
+    st.write("Manager-only view of direct reports.")
 
-# 4. KPI ADMINISTRATION PAGE
 elif selection == "⚙️ KPI Administration":
-    st.subheader("Manage Global KPIs")
-    if role_id != 1:
-        st.error("Admin Only")
-    else:
-        st.write("Tools to create/edit KPIs and set weightages.")
+    st.title("⚙️ KPI Management")
+    st.write("Admin-only tool to define KPI targets.")
 
-# 5. AUDIT LOGS PAGE
 elif selection == "📜 Audit Logs":
-    st.subheader("System Activity Feed")
-    if role_id != 1:
-        st.error("Admin Only")
-    else:
-        st.write("View the immutable record of all system actions.")
+    st.title("📜 System Audit")
+    st.write("View immutable activity logs.")
