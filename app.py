@@ -6,7 +6,7 @@ from typing import Optional, List
 from database import engine, Base, get_db
 import models, schemas, auth
 from datetime import datetime, timezone
-
+import services
 
 Base.metadata.create_all(bind=engine)
 
@@ -270,3 +270,28 @@ def verify_achievement(
 
     db.commit()
     return {"message": f"Achievement successfully {data.status}"}
+
+@app.get("/users/{user_id}/score")
+def get_user_monthly_score(
+    user_id: int,
+    month: int = datetime.now().month,
+    year: int = datetime.now().year,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Senior Logic: Only Admin, Manager, or the User themselves can see the score."""
+    is_admin = current_user.role_id == 1
+    is_owner = current_user.id == user_id
+    
+    user_to_check = db.query(models.User).filter(models.User.id == user_id).first()
+    is_manager = user_to_check.manager_id == current_user.id if user_to_check else False
+
+    if not (is_admin or is_owner or is_manager):
+        raise HTTPException(status_code=403, detail="Not authorized to view this score")
+
+    score = services.calculate_user_kpi_score(db, user_id, month, year)
+    return {
+        "user_id": user_id,
+        "period": f"{year}-{month:02d}",
+        "total_weighted_score": score
+    }
