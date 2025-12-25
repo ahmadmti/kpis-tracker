@@ -59,3 +59,15 @@ class KPI(Base):
     
     # Links KPI to a specific Role
     role_id = Column(Integer, ForeignKey("roles.id"), nullable=False)
+
+class KPIOverride(Base):
+    __tablename__ = "kpi_overrides"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    kpi_id = Column(Integer, ForeignKey("kpis.id"), nullable=False)
+    custom_target_value = Column(Float, nullable=False) # The new override value
+    
+    # Relationships for easy lookup
+    user = relationship("User", backref="overrides")
+    kpi = relationship("KPI")

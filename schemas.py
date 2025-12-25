@@ -73,3 +73,14 @@ class KPIOut(KPIBase):
 
     class Config:
         from_attributes = True
+        
+class KPIOverrideCreate(BaseModel):
+    user_id: int
+    kpi_id: int
+    custom_target_value: float = Field(..., gt=0)
+
+class KPIOverrideOut(KPIOverrideCreate):
+    id: int
+
+    class Config:
+        from_attributes = True

@@ -169,3 +169,33 @@ def create_kpi(
     # log_action(db, current_user.id, "KPI_CREATED", f"Created KPI {db_kpi.id}")
     
     return db_kpi
+
+@app.post("/kpis/overrides/", response_model=schemas.KPIOverrideOut)
+def create_kpi_override(
+    override: schemas.KPIOverrideCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Senior Logic: Admins can set custom targets for specific users."""
+    # 1. Permission Check
+    if current_user.role_id != 1:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    # 2. Prevent duplicates (Update existing if found)
+    existing = db.query(models.KPIOverride).filter(
+        models.KPIOverride.user_id == override.user_id,
+        models.KPIOverride.kpi_id == override.kpi_id
+    ).first()
+
+    if existing:
+        existing.custom_target_value = override.custom_target_value
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    # 3. Create new override
+    db_override = models.KPIOverride(**override.model_dump())
+    db.add(db_override)
+    db.commit()
+    db.refresh(db_override)
+    return db_override
