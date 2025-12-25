@@ -144,28 +144,74 @@ if selection == "🏠 Dashboard":
             else:
                 st.write("No KPIs assigned to your role yet.")
 
-# --- 2. ACHIEVEMENTS PAGE (Read-only view of submissions) ---
+# --- 2. ACHIEVEMENTS PAGE (Entry Form & History) ---
 elif selection == "🏆 Achievements":
-    st.title("🏆 Achievement History")
-    st.write("View your historical submissions and their verification status.")
+    st.title("🏆 Achievement Center")
     
-    # Fetch historical achievements
-    # We use a filter or a specific endpoint if available, otherwise fetch all
+    # --- SECTION 1: Submission Form ---
+    st.subheader("Submit New Progress")
+    
+    # Fetch KPIs so the user knows what they can submit against
+    kpi_res = requests.get(f"{API_URL}/kpis/", headers=headers)
+    
+    if kpi_res.status_code == 200:
+        kpis = kpi_res.json()
+        # Filter KPIs for the user's role (or all for Admin)
+        user_kpis = [k for k in kpis if k['role_id'] == role_id or role_id == 1]
+        
+        if not user_kpis:
+            st.warning("No KPIs are currently assigned to your role. You cannot submit achievements yet.")
+        else:
+            # Map names to IDs for the dropdown
+            kpi_map = {k['name']: k['id'] for k in user_kpis}
+            
+            with st.form("achievement_submission_form", clear_on_submit=True):
+                selected_kpi = st.selectbox("Target KPI", options=list(kpi_map.keys()))
+                achieved_value = st.number_input("Achieved Value", min_value=0.0, step=1.0)
+                description = st.text_area("Description / Work Performed", placeholder="Describe how you achieved this...")
+                evidence_url = st.text_input("Evidence URL (Optional)", placeholder="https://link-to-proof.com")
+                
+                submitted = st.form_submit_button("Submit Achievement")
+                
+                if submitted:
+                    # Client-side Validation
+                    if achieved_value <= 0:
+                        st.error("Please enter a value greater than 0.")
+                    elif not description:
+                        st.error("Please provide a description of the work.")
+                    else:
+                        # Prepare Data for Backend
+                        payload = {
+                            "kpi_id": kpi_map[selected_kpi],
+                            "value": achieved_value,
+                            "description": description,
+                            "evidence_url": evidence_url if evidence_url else None
+                        }
+                        
+                        # API Call
+                        post_res = requests.post(f"{API_URL}/achievements/", json=payload, headers=headers)
+                        
+                        if post_res.status_code == 200:
+                            st.success("✅ Achievement submitted successfully! Pending manager verification.")
+                            st.balloons() # Visual feedback
+                        else:
+                            # Show clear API error
+                            error_detail = post_res.json().get('detail', 'Unknown error occurred.')
+                            st.error(f"❌ Submission Failed: {error_detail}")
+
+    st.divider()
+
+    # --- SECTION 2: History (The Read-only view from Module 2) ---
+    st.subheader("Your Submission History")
     ach_res = requests.get(f"{API_URL}/achievements/", headers=headers)
-    
     if ach_res.status_code == 200:
         ach_data = ach_res.json()
-        if ach_data:
-            # Filter for only this user's achievements
-            my_ach = [a for a in ach_data if a['user_id'] == user_id]
-            if my_ach:
-                df_ach = pd.DataFrame(my_ach)
-                # Mapping the view for a layman
-                st.dataframe(df_ach[['id', 'kpi_id', 'value', 'status', 'created_at']])
-            else:
-                st.write("You haven't submitted any achievements yet.")
+        my_ach = [a for a in ach_data if a['user_id'] == user_id]
+        if my_ach:
+            df_ach = pd.DataFrame(my_ach)
+            st.dataframe(df_ach[['id', 'value', 'status', 'description', 'created_at']], use_container_width=True)
         else:
-            st.write("No achievements found in the system.")
+            st.info("No historical data to display.")
 
 elif selection == "👥 Team Performance":
     st.title("👥 Team Tracking")
