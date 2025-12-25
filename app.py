@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from typing import Optional, List
 from database import engine, Base, get_db
 import models, schemas, auth
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 Base.metadata.create_all(bind=engine)
@@ -233,3 +233,40 @@ def log_achievement(
     db.commit()
     db.refresh(db_achievement)
     return db_achievement
+
+@app.put("/achievements/{achievement_id}/verify")
+def verify_achievement(
+    achievement_id: int,
+    data: schemas.AchievementVerify,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Senior Logic: Managerial verification with state-transition enforcement."""
+    # 1. Fetch Achievement
+    achievement = db.query(models.Achievement).filter(models.Achievement.id == achievement_id).first()
+    if not achievement:
+        raise HTTPException(status_code=404, detail="Achievement not found")
+
+    # 2. Strict State Check: Must be PENDING
+    if achievement.status != models.AchievementStatus.PENDING:
+        raise HTTPException(status_code=400, detail=f"Cannot change status of a {achievement.status} entry")
+
+    # 3. Hierarchy Check: Is the verifier the Admin OR the user's manager?
+    user_to_verify = db.query(models.User).filter(models.User.id == achievement.user_id).first()
+    is_manager = user_to_verify.manager_id == current_user.id
+    is_admin = current_user.role_id == 1
+
+    if not (is_admin or is_manager):
+        raise HTTPException(status_code=403, detail="Only managers or admins can verify achievements")
+
+    # 4. Apply Changes
+    achievement.status = data.status
+    achievement.verifier_id = current_user.id
+    achievement.verified_at = datetime.now(timezone.utc)    
+    if data.status == models.AchievementStatus.REJECTED:
+        if not data.rejection_reason:
+            raise HTTPException(status_code=400, detail="Rejection reason required")
+        achievement.rejection_reason = data.rejection_reason
+
+    db.commit()
+    return {"message": f"Achievement successfully {data.status}"}

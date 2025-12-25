@@ -101,3 +101,13 @@ class AchievementOut(AchievementCreate):
 
     class Config:
         from_attributes = True
+
+class AchievementVerify(BaseModel):
+    status: AchievementStatus # Must be VERIFIED or REJECTED
+    rejection_reason: Optional[str] = None
+
+    @field_validator('status')
+    def validate_transition(cls, v):
+        if v not in [AchievementStatus.VERIFIED, AchievementStatus.REJECTED]:
+            raise ValueError("Status must be VERIFIED or REJECTED")
+        return v

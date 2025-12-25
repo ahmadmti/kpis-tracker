@@ -3,7 +3,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
 from database import Base
-from datetime import datetime
+from datetime import datetime, timezone
 
 class PermissionType(str, enum.Enum):
     USER_CREATE = "user:create"
@@ -87,9 +87,12 @@ class Achievement(Base):
     achieved_value = Column(Float, nullable=False) # Must be >= 0
     description = Column(String)
     evidence_url = Column(String) # URL to proof
-    achievement_date = Column(DateTime, default=datetime.utcnow)
+    achievement_date = Column(DateTime, default=datetime.now(timezone.utc))
     status = Column(Enum(AchievementStatus), default=AchievementStatus.PENDING)
 
     # Relationships
     user = relationship("User")
     kpi = relationship("KPI")
+    verifier_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    verified_at = Column(DateTime, nullable=True)
+    rejection_reason = Column(String, nullable=True)
