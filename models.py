@@ -36,3 +36,26 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     # Hierarchy Field
     # Relationships
+
+class MeasurementType(str, enum.Enum):
+    COUNT = "COUNT"
+    AMOUNT = "AMOUNT"
+    PERCENTAGE = "PERCENTAGE"
+
+class PeriodType(str, enum.Enum):
+    MONTHLY = "MONTHLY"
+
+class KPI(Base):
+    __tablename__ = "kpis"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    description = Column(String)
+    category = Column(String, nullable=False)
+    target_value = Column(Float, nullable=False) # Must be > 0
+    weightage = Column(Float, nullable=False)    # 0 to 100
+    measurement_type = Column(Enum(MeasurementType), nullable=False)
+    period = Column(Enum(PeriodType), default=PeriodType.MONTHLY)
+    
+    # Links KPI to a specific Role
+    role_id = Column(Integer, ForeignKey("roles.id"), nullable=False)

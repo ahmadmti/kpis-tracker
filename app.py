@@ -1,9 +1,11 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from database import engine, Base, get_db
 import models, schemas, auth
+
 
 Base.metadata.create_all(bind=engine)
 
@@ -135,3 +137,35 @@ def update_manager(
     db_user.manager_id = manager_id
     db.commit()
     return {"message": "Hierarchy updated successfully"}
+
+@app.post("/kpis/", response_model=schemas.KPIOut)
+def create_kpi(
+    kpi: schemas.KPICreate, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    # Only Admin can define KPIs
+    if current_user.role_id != 1:
+        raise HTTPException(status_code=403, detail="Forbidden: Insufficient permissions")
+
+    # Business Rule: Total weightage per role/period <= 100
+    current_weight_sum = db.query(func.sum(models.KPI.weightage)).filter(
+        models.KPI.role_id == kpi.role_id,
+        models.KPI.period == kpi.period
+    ).scalar() or 0.0
+
+    if current_weight_sum + kpi.weightage > 100:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Total weightage for this role/period exceeds 100. (Current: {current_weight_sum})"
+        )
+
+    db_kpi = models.KPI(**kpi.dict())
+    db.add(db_kpi)
+    db.commit()
+    db.refresh(db_kpi)
+    
+    # Audit Log (Passive)
+    # log_action(db, current_user.id, "KPI_CREATED", f"Created KPI {db_kpi.id}")
+    
+    return db_kpi

@@ -1,7 +1,7 @@
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, field_validator, Field
 from typing import Optional, List
 from datetime import datetime
-from models import PermissionType
+from models import PermissionType, MeasurementType, PeriodType
 
 class UserBase(BaseModel):
     email: EmailStr
@@ -51,6 +51,25 @@ class UserOut(UserBase):
 # Recursive schema for team members
 class TeamMemberOut(UserOut):
     subordinates: List["TeamMemberOut"] = []
+
+    class Config:
+        from_attributes = True
+
+class KPIBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    category: str
+    target_value: float = Field(..., gt=0)
+    weightage: float = Field(..., ge=0, le=100)
+    measurement_type: MeasurementType
+    role_id: int
+    period: PeriodType = PeriodType.MONTHLY
+
+class KPICreate(KPIBase):
+    pass
+
+class KPIOut(KPIBase):
+    id: int
 
     class Config:
         from_attributes = True
