@@ -354,3 +354,8 @@ def get_all_recommendations(
         raise HTTPException(status_code=403, detail="Admin access required")
     
     return db.query(models.AutomationRule).all()
+
+@app.get("/users/me", response_model=schemas.User)
+def get_current_user_profile(current_user: models.User = Depends(auth.get_current_user)):
+    """Senior Logic: Returns the logged-in user's profile info."""
+    return current_user

@@ -3,7 +3,16 @@ from typing import Optional, List
 from datetime import datetime
 from models import PermissionType, MeasurementType, PeriodType, AchievementStatus
 
+class User(BaseModel):
+    id: int
+    email: str
+    full_name: str
+    role_id: int
+    manager_id: Optional[int] = None
 
+    class Config:
+        from_attributes = True
+        
 class UserBase(BaseModel):
     email: EmailStr
     full_name: str
