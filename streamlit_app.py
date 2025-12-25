@@ -78,32 +78,39 @@ now = datetime.now()
 
 # VIEW A: ADMIN (Role 1)
 if role_id == 1:
-    st.header("Admin Enterprise Overview")
+    st.header("🏢 Admin Enterprise Overview")
     res = requests.get(f"{API_URL}/reports/dashboard", headers=headers)
     if res.status_code == 200:
         data = res.json()
         col1, col2 = st.columns(2)
         col1.metric("Company Avg Score", f"{data['average_score']}%")
-        col2.metric("Period", data['period'])
+        col2.download_button("📥 Download Excel Report", 
+                            data=requests.get(f"{API_URL}/reports/export?format=excel", headers=headers).content,
+                            file_name="company_report.xlsx")
         
         df = pd.DataFrame(data['user_scores'])
-        st.subheader("Employee Performance Ranking")
         st.bar_chart(df.set_index("full_name")["total_weighted_score"])
         st.table(df)
 
-# VIEW B: USER (Role 3) & Others
+# VIEW B: MANAGER (Role 2)
+elif role_id == 2:
+    st.header("👥 Team Management Dashboard")
+    # Managers see their own score first
+    my_score_res = requests.get(f"{API_URL}/users/{user_id}/score?month={now.month}&year={now.year}", headers=headers)
+    if my_score_res.status_code == 200:
+        st.subheader("My Performance")
+        st.metric("Personal Score", f"{my_score_res.json()['total_weighted_score']}%")
+    
+    st.divider()
+    st.subheader("My Direct Reports")
+    st.info("Logic: This section will list your team members' scores once they are assigned to you in the User table.")
+    # In a future module, we can add a specific /reports/team endpoint here
+
+# VIEW C: USER (Role 3)
 else:
-    st.header("My Performance Progress")
+    st.header("🎯 My Performance Progress")
     res = requests.get(f"{API_URL}/users/{user_id}/score?month={now.month}&year={now.year}", headers=headers)
     if res.status_code == 200:
         score = res.json()["total_weighted_score"]
-        
-        # Display score as a progress bar
-        st.write(f"Your weighted score for **{now.strftime('%B %Y')}**")
+        st.metric("Current Month Score", f"{score}%")
         st.progress(score / 100 if score <= 100 else 1.0)
-        st.metric("Performance Score", f"{score}%")
-        
-        if score >= 90:
-            st.success("Excellent! You are on track for a Bonus.")
-        elif score < 50:
-            st.warning("Performance is below target. Please review your KPIs.")

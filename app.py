@@ -8,6 +8,8 @@ import models, schemas, auth
 from datetime import datetime, timezone
 import services
 import audit, automation
+from fastapi.responses import Response
+import reports
 
 Base.metadata.create_all(bind=engine)
 
@@ -359,3 +361,49 @@ def get_all_recommendations(
 def get_current_user_profile(current_user: models.User = Depends(auth.get_current_user)):
     """Senior Logic: Returns the logged-in user's profile info."""
     return current_user
+
+@app.get("/reports/export")
+def export_report(
+    format: str = "excel", # or "pdf"
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Senior Logic: Export performance data based on role permissions."""
+    if current_user.role_id != 1:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    # 1. Gather Data (Similar to Dashboard logic)
+    all_users = db.query(models.User).all()
+    report_data = []
+    now = datetime.now(timezone.utc)
+
+    for user in all_users:
+        score = services.calculate_user_kpi_score(db, user.id, now.month, now.year)
+        report_data.append({
+            "user_id": user.id,
+            "full_name": user.full_name,
+            "score": score,
+            "period": f"{now.year}-{now.month}"
+        })
+
+    # 2. Generate File
+    if format == "excel":
+        file_content = reports.generate_excel_report(report_data)
+        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        filename = "kpi_report.xlsx"
+    else:
+        file_content = reports.generate_pdf_report(report_data)
+        media_type = "application/pdf"
+        filename = "kpi_report.pdf"
+
+    # 3. Audit the Export
+    audit.log_action(
+        db, user_id=current_user.id, action=models.ActionType.CREATE,
+        entity=models.EntityType.USER, description=f"Exported {format} report"
+    )
+
+    return Response(
+        content=file_content,
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
