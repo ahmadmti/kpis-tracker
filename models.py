@@ -126,3 +126,23 @@ class AuditLog(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     user = relationship("User")
+
+# Add to Enums at the bottom of models.py
+class RecommendationType(str, enum.Enum):
+    BONUS = "BONUS"
+    PROMOTION = "PROMOTION"
+    WARNING = "WARNING"
+    FINAL_WARNING = "FINAL_WARNING"
+    TERMINATION = "TERMINATION"
+
+class AutomationRule(Base):
+    __tablename__ = "automation_recommendations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    score_achieved = Column(Float, nullable=False)
+    recommendation = Column(Enum(RecommendationType), nullable=False)
+    period = Column(String, nullable=False) # e.g., "2025-12"
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user = relationship("User")

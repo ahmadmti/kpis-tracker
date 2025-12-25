@@ -7,7 +7,7 @@ from database import engine, Base, get_db
 import models, schemas, auth
 from datetime import datetime, timezone
 import services
-import audit
+import audit, automation
 
 Base.metadata.create_all(bind=engine)
 
@@ -318,3 +318,39 @@ def get_user_monthly_score(
         "period": f"{year}-{month:02d}",
         "total_weighted_score": score
     }
+
+@app.post("/admin/evaluate/{user_id}")
+def run_evaluation(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Senior Logic: Admin-triggered performance evaluation."""
+    if current_user.role_id != 1:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    now = datetime.now(timezone.utc)
+    recommendation = automation.evaluate_performance(db, user_id, now.month, now.year)
+    
+    if not recommendation:
+        return {"message": "Evaluation complete: Performance is within normal range. No action recommended."}
+    
+    # Audit the recommendation generation
+    audit.log_action(
+        db, user_id=current_user.id, action=models.ActionType.CREATE,
+        entity=models.EntityType.USER, entity_id=user_id,
+        description=f"Generated {recommendation.recommendation} recommendation for user {user_id}"
+    )
+    
+    return recommendation
+
+@app.get("/admin/recommendations")
+def get_all_recommendations(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """View all automated performance flags."""
+    if current_user.role_id != 1:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    return db.query(models.AutomationRule).all()
