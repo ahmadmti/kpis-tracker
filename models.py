@@ -91,7 +91,9 @@ class Achievement(Base):
     status = Column(Enum(AchievementStatus), default=AchievementStatus.PENDING)
 
     # Relationships
-    user = relationship("User")
+    user = relationship("User", foreign_keys="[Achievement.user_id]", backref="my_achievements")
+    verifier = relationship("User", foreign_keys="[Achievement.verifier_id]", backref="verified_achievements")
+    #user = relationship("User")
     kpi = relationship("KPI")
     verifier_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     verified_at = Column(DateTime, nullable=True)
