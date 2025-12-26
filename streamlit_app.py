@@ -1,5 +1,5 @@
 import streamlit as st
-import requests
+import requests, pandas as pd
 
 # --- 1. CONFIGURATION ---
 API_URL = "http://13.61.15.68:8000"
