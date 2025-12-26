@@ -26,7 +26,7 @@ if st.session_state.token is None:
     st.title("🔐 Admin Login")
     
     with st.container(border=True):
-        email = st.text_input("Email", placeholder="admin@example.com",value="ahmad_fraz@abark.tec")
+        email = st.text_input("Email", placeholder="admin@example.com",value="ahmad_fraz@abark.tech")
         password = st.text_input("Password", type="password",value="Admin@786")
         
         if st.button("Login", use_container_width=True):
