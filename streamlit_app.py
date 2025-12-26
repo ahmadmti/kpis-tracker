@@ -101,7 +101,7 @@ if st.session_state.current_page == "Dashboard":
     try:
         # We use the token from session state to authorize the request
         headers = {"Authorization": f"Bearer {st.session_state.token}"}
-        response = requests.get(f"{API_URL}/admin/dashboard", headers=headers)
+        response = requests.get(f"{API_URL}/reports/dashboard", headers=headers)
         
         if response.status_code == 200:
             data = response.json()
@@ -207,5 +207,41 @@ elif st.session_state.current_page == "KPIs":
     except Exception as e:
         st.error(f"Error loading KPIs: {e}")
 
+elif st.session_state.current_page == "Audit Logs":
+    st.title("📜 System Audit Logs")
+    st.markdown("Track all administrative and user activities for security compliance.")
+
+    headers = {"Authorization": f"Bearer {st.session_state.token}"}
+
+    try:
+        # Fetching from the /audit/ endpoint we created in the backend
+        response = requests.get(f"{API_URL}/audit/", headers=headers)
+        
+        if response.status_code == 200:
+            logs = response.json()
+            if logs:
+                df_logs = pd.DataFrame(logs)
+                
+                # Professional Table Formatting
+                # Assuming columns: timestamp, user_id, action, details
+                df_logs = df_logs.sort_values(by="timestamp", ascending=False)
+                
+                st.dataframe(
+                    df_logs, 
+                    use_container_width=True, 
+                    hide_index=True,
+                    column_config={
+                        "timestamp": st.column_config.DatetimeColumn("Time"),
+                        "action": st.column_config.TextColumn("Action Event"),
+                        "details": st.column_config.TextColumn("Log Details")
+                    }
+                )
+            else:
+                st.info("No audit logs found in the database.")
+        else:
+            st.error(f"Failed to retrieve logs. Verify the /audit/ endpoint.")
+            
+    except Exception as e:
+        st.error(f"UI Error: {e}")
 else:
     st.write(f"The {st.session_state.current_page} view is active.")
