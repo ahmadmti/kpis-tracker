@@ -24,9 +24,9 @@ def logout():
 # If the token is missing, we show the login form and STOP the rest of the script.
 if st.session_state.token is None:
     st.title("🔐 Admin Login")
-    
+     
     with st.container(border=True):
-        email = st.text_input("Email", placeholder="admin@example.com",value="ahmad_fraz@abark.tech")
+        email = st.text_input("Email", placeholder="admin@example.comm",value="ahmad_fraz@abark.tech")
         password = st.text_input("Password", type="password",value="Admin@786")
         
         if st.button("Login", use_container_width=True):
@@ -65,7 +65,15 @@ u = st.session_state.user
 # Sidebar Navigation
 with st.sidebar:
     st.title("🛡️ Admin Portal")
-    st.info(f"👤 **{u.get('full_name')}**\n\n{u.get('email')}")
+    
+    # DEFENSIVE CHECK: Only show user info if 'u' is not None
+    u = st.session_state.get("user") 
+    
+    if u is not None:
+        st.info(f"👤 **{u.get('full_name')}**\n\n{u.get('email')}")
+    else:
+        st.warning("👤 Session initializing...")
+    
     st.divider()
     
     menu_items = [
