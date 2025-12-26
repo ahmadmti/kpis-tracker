@@ -1,6 +1,6 @@
 import streamlit as st
 import requests
-from utils.api_client import API_BASE, api_headers
+from api_client import API_BASE, api_headers
 
 st.set_page_config(page_title="Achievement Verification", layout="wide")
 
