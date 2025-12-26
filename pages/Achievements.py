@@ -1,73 +1,86 @@
 import streamlit as st
 import requests
-import pandas as pd
+from utils.api_client import API_BASE, api_headers
 
-API_URL = "http://13.61.15.68:8000"
+st.set_page_config(page_title="Achievement Verification", layout="wide")
 
-# Security Check
-if "token" not in st.session_state or not st.session_state.token:
-    st.warning("Please login on the main page first.")
+st.title("Achievement Verification")
+
+st.info("Verify or reject submitted achievements. Only pending items are actionable.")
+
+# -----------------------------------
+# Fetch pending achievements
+# -----------------------------------
+resp = requests.get(
+    f"{API_BASE}/achievements/",
+    headers=api_headers()
+)
+
+if resp.status_code != 200:
+    st.error("Failed to load achievements")
     st.stop()
 
-headers = {"Authorization": f"Bearer {st.session_state.token}"}
-user = st.session_state.user
+achievements = resp.json()
 
-st.title("🏆 My Achievements")
-tab1, tab2 = st.tabs(["➕ Submit New", "📜 My History"])
+pending = [a for a in achievements if a["status"] == "PENDING"]
 
-# --- TAB 1: SUBMISSION FORM ---
-with tab1:
-    st.subheader("Log a New Achievement")
-    try:
-        # Fetch all KPIs
-        kpis = requests.get(f"{API_URL}/kpis/", headers=headers).json()
-        # Filter KPIs relevant to this user
-        my_kpis = [k for k in kpis if k['role_id'] == user['role_id'] or user['role_id'] == 1]
-        
-        if not my_kpis:
-            st.warning("No KPIs found for your role. Please contact Admin.")
-        else:
-            with st.form("achievement_form", clear_on_submit=True):
-                # Create a dropdown map: "Name (Target: 100)" -> ID
-                kpi_map = {f"{k['name']} (Target: {k['target_value']})": k['id'] for k in my_kpis}
-                selected_label = st.selectbox("Select Target KPI", list(kpi_map.keys()))
-                
-                val = st.number_input("Value Achieved", min_value=0.0, step=1.0)
-                desc = st.text_area("Description / Evidence", placeholder="Describe your work...")
-                evidence = st.text_input("Evidence Link (Optional)")
-                
-                if st.form_submit_button("Submit for Verification"):
-                    payload = {
-                        "kpi_id": kpi_map[selected_label], 
-                        "value": val, 
-                        "description": desc,
-                        "evidence_url": evidence
+if not pending:
+    st.success("No pending achievements 🎉")
+    st.stop()
+
+# -----------------------------------
+# Display & actions
+# -----------------------------------
+for ach in pending:
+    with st.expander(f"Achievement #{ach['id']} | User {ach['user_id']} | KPI {ach['kpi_id']}"):
+        st.write(f"**Achieved Value:** {ach['achieved_value']}")
+        st.write(f"**Description:** {ach['description']}")
+
+        if ach.get("evidence_url"):
+            st.markdown(f"[Evidence Link]({ach['evidence_url']})")
+
+        col1, col2 = st.columns(2)
+
+        # VERIFY
+        with col1:
+            if st.button(f"✅ Verify #{ach['id']}"):
+                verify_payload = {"status": "VERIFIED"}
+                vr = requests.put(
+                    f"{API_BASE}/achievements/{ach['id']}/verify",
+                    json=verify_payload,
+                    headers=api_headers()
+                )
+
+                if vr.status_code == 200:
+                    st.success("Achievement verified")
+                    st.rerun()
+                else:
+                    st.error(vr.json())
+
+        # REJECT
+        with col2:
+            reason = st.text_input(
+                f"Rejection reason #{ach['id']}",
+                key=f"reason_{ach['id']}"
+            )
+
+            if st.button(f"❌ Reject #{ach['id']}"):
+                if not reason:
+                    st.warning("Rejection reason is required")
+                else:
+                    reject_payload = {
+                        "status": "REJECTED",
+                        "rejection_reason": reason
                     }
-                    res = requests.post(f"{API_URL}/achievements/", json=payload, headers=headers)
-                    if res.status_code == 200:
-                        st.balloons()
-                        st.success("Achievement submitted successfully!")
-                    else:
-                        st.error(f"Submission failed: {res.text}")
-    except Exception as e:
-        st.error(f"Error loading KPIs: {e}")
 
-# --- TAB 2: HISTORY VIEW ---
-with tab2:
-    st.subheader("Submission History")
-    try:
-        ach_res = requests.get(f"{API_URL}/achievements/", headers=headers)
-        if ach_res.status_code == 200:
-            all_ach = ach_res.json()
-            # Filter only my achievements
-            my_ach = [a for a in all_ach if a['user_id'] == user['id']]
-            
-            if my_ach:
-                df = pd.DataFrame(my_ach)
-                # Select clean columns
-                display_df = df[['created_at', 'value', 'status', 'description']]
-                st.dataframe(display_df, use_container_width=True)
-            else:
-                st.info("No past submissions found.")
-    except Exception as e:
-        st.error(f"Could not load history: {e}")
+                    rr = requests.put(
+                        f"{API_BASE}/achievements/{ach['id']}/verify",
+                        json=reject_payload,
+                        headers=api_headers()
+                    )
+
+                    if rr.status_code == 200:
+                        st.success("Achievement rejected")
+                        st.rerun()
+                    else:
+                        st.error(rr.json())
