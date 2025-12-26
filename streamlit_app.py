@@ -87,62 +87,7 @@ st.title(f"📍 {st.session_state.current_page}")
 
 # Logic to handle sub-modules
 if st.session_state.current_page == "Dashboard":
-    
-    st.title("📊 Enterprise Performance Overview")
-    
-    # 1. API Fetching Logic
-    try:
-        # We use the token from session state to authorize the request
-        headers = {"Authorization": f"Bearer {st.session_state.token}"}
-        response = requests.get(f"{API_URL}/admin/dashboard", headers=headers)
-        
-        if response.status_code == 200:
-            data = response.json()
-            
-            # 2. Key Performance Metrics (Metric Cards)
-            # We create 5 columns to spread the data horizontally
-            m1, m2, m3, m4, m5 = st.columns(5)
-            
-            # Using .get() ensures the app doesn't crash if a value is missing from the JSON
-            m1.metric("Total Users", data.get("total_users", 0))
-            m2.metric("Active Users", data.get("active_users", 0))
-            m3.metric("Total KPIs", data.get("total_kpis", 0))
-            m4.metric("Avg. Completion", f"{data.get('avg_completion', 0)}%")
-            m5.metric("Underperforming", data.get("underperforming_count", 0), delta_color="inverse")
-            
-            st.divider()
-
-            # 3. Data Visualization (Charts)
-            col_left, col_right = st.columns(2)
-            
-            with col_left:
-                st.subheader("Departmental Distribution")
-                # Assume backend returns a list of dictionaries for 'dept_scores'
-                dept_data = data.get("dept_scores", [])
-                if dept_data:
-                    df_dept = pd.DataFrame(dept_data)
-                    st.bar_chart(data=df_dept, x="department", y="average_score")
-                else:
-                    st.info("No departmental data available to chart.")
-
-            with col_right:
-                st.subheader("Monthly Progress")
-                # Assume backend returns 'monthly_trends'
-                trend_data = data.get("monthly_trends", [])
-                if trend_data:
-                    df_trend = pd.DataFrame(trend_data)
-                    st.line_chart(data=df_trend, x="month", y="completion_rate")
-                else:
-                    st.info("No trend data available to chart.")
-
-        elif response.status_code == 401:
-            st.error("🔒 Session expired. Please log out and log back in.")
-        else:
-            st.warning(f"⚠️ Dashboard data partially unavailable (Status: {response.status_code})")
-
-    except Exception as e:
-        st.error(f"🚫 Connection Error: Could not reach the Admin API. ({str(e)})")
-        st.info("Ensure the FastAPI server is running and accessible.")
+    st.write("Command Center Ahmad")
     
 elif st.session_state.current_page == "Users":
     st.subheader("User Directory")
