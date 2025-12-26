@@ -22,8 +22,8 @@ def api_error(resp):
 def login():
     st.title("Admin Login")
 
-    username = st.text_input("Email")
-    password = st.text_input("Password", type="password")
+    username = st.text_input("Email", value="ahmad_fraz@abark.tech")
+    password = st.text_input("Password", type="password", value="Admin@786")
 
     if st.button("Login"):
         resp = requests.post(
