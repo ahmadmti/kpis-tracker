@@ -1,5 +1,12 @@
 import streamlit as st
 import requests
+import sys
+import os
+
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+
 
 API_BASE = "http://13.61.15.68:8000"
 
@@ -130,13 +137,13 @@ def main():
         users_page()
 
     elif page == "Roles":
-        from pages import Roles
+        import pages.Roles
 
     elif page == "KPIs":
-        from pages import KPIs
+        import pages.KPIs
 
     elif page == "Achievements":
-        from pages import Achievements
+        import pages.Achievements
 
 
 # -----------------------------

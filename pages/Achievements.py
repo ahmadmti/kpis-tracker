@@ -1,12 +1,5 @@
 import streamlit as st
 import requests
-import sys
-import os
-
-ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if ROOT_DIR not in sys.path:
-    sys.path.append(ROOT_DIR)
-
 from utils.api_client import API_BASE, api_headers
 
 st.set_page_config(page_title="Achievement Verification", layout="wide")
