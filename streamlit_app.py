@@ -157,8 +157,55 @@ elif st.session_state.current_page == "Users":
     st.info("Module 3 (User Management) is ready for integration.")
 
 elif st.session_state.current_page == "KPIs":
-    st.subheader("KPI Definitions")
-    st.info("Module 5 (KPI Config) is ready for integration.")
+    st.title("🎯 KPI Target Management")
+    st.markdown("Define and track performance metrics for all departments.")
+
+    headers = {"Authorization": f"Bearer {st.session_state.token}"}
+
+    # --- 1. CREATE NEW KPI (Expander Form) ---
+    with st.expander("➕ Define New KPI Target"):
+        with st.form("kpi_form", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                kpi_name = st.text_input("KPI Name", placeholder="e.g., Monthly Sales")
+                target_val = st.number_input("Target Value", min_value=0.0, step=1.0)
+            with col2:
+                role_id = st.selectbox("Assign to Role", [1, 2, 3], format_func=lambda x: {1:"Admin", 2:"Manager", 3:"Staff"}[x])
+                weightage = st.slider("Weightage (%)", 0, 100, 20)
+            
+            if st.form_submit_button("Save KPI Definition", use_container_width=True):
+                try:
+                    # Using standard endpoint /kpis/ based on typical backend patterns
+                    payload = {"name": kpi_name, "target_value": target_val, "weightage": weightage, "role_id": role_id}
+                    res = requests.post(f"{API_URL}/kpis/", json=payload, headers=headers)
+                    if res.status_code in [200, 201]:
+                        st.success(f"✅ KPI '{kpi_name}' created successfully!")
+                        st.rerun()
+                    else:
+                        st.error(f"Failed to save: {res.text}")
+                except Exception as e:
+                    st.error(f"Connection Error: {e}")
+
+    st.divider()
+
+    # --- 2. KPI LISTING (Data Table) ---
+    st.subheader("Existing KPI Registry")
+    try:
+        # Fetching existing KPIs
+        response = requests.get(f"{API_URL}/kpis/", headers=headers)
+        if response.status_code == 200:
+            kpi_data = response.json()
+            if kpi_data:
+                df_kpis = pd.DataFrame(kpi_data)
+                # Cleaning up columns for display
+                display_df = df_kpis[['id', 'name', 'target_value', 'weightage', 'role_id']]
+                st.dataframe(display_df, use_container_width=True, hide_index=True)
+            else:
+                st.info("No KPIs defined yet. Use the form above to add one.")
+        else:
+            st.warning("Unable to fetch KPI list. Verify the /kpis/ endpoint.")
+    except Exception as e:
+        st.error(f"Error loading KPIs: {e}")
 
 else:
     st.write(f"The {st.session_state.current_page} view is active.")
