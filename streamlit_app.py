@@ -118,8 +118,9 @@ def main():
     st.sidebar.write(user["email"])
 
     page = st.sidebar.radio(
-        "Navigation",
-        ["Users, Roles, KPIs"])
+    "Navigation",
+    ["Users", "Roles", "KPIs", "Achievements"]
+)
 
     if st.sidebar.button("Logout"):
         st.session_state.clear()
@@ -127,10 +128,15 @@ def main():
 
     if page == "Users":
         users_page()
-    if page == "Roles":
+
+    elif page == "Roles":
         from pages import Roles
-    if page == "KPIs":
+
+    elif page == "KPIs":
         from pages import KPIs
+
+    elif page == "Achievements":
+        from pages import Achievements
 
 
 # -----------------------------
