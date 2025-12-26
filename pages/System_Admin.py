@@ -1,92 +1,50 @@
 import streamlit as st
 import requests
-import pandas as pd
 
+# --- CONFIGURATION ---
 API_URL = "http://13.61.15.68:8000"
 
-# Security Check
-if "token" not in st.session_state or not st.session_state.token:
+# --- SESSION GUARD ---
+# 1. Check if token exists
+if "token" not in st.session_state or st.session_state.token is None:
+    st.warning("Please login to access this page.")
     st.stop()
 
-if st.session_state.user.get('role_id') != 1:
-    st.error("⛔ Admin Access Required")
+# 2. Check if user data exists and verify Admin Role (ID: 1)
+user = st.session_state.user
+if not user or user.get("role_id") != 1:
+    st.error("⛔ **Access Denied**: You do not have Administrative privileges.")
+    if st.button("Return to Home"):
+        st.switch_page("streamlit_app.py")
     st.stop()
 
-headers = {"Authorization": f"Bearer {st.session_state.token}"}
-st.title("⚙️ System Administration")
+# --- ADMIN HEADER ---
+st.set_page_config(page_title="System Administration", layout="wide")
 
-tab_users, tab_kpis = st.tabs(["👥 User Management", "🎯 KPI Configuration"])
+# Top Bar Admin Info
+col1, col2 = st.columns([4, 1])
+with col1:
+    st.title("⚙️ System Administration")
+    st.markdown(f"**Admin:** {user.get('full_name')} | **Email:** {user.get('email')}")
+with col2:
+    if st.button("Logout", key="admin_logout"):
+        st.session_state.token = None
+        st.session_state.user = None
+        st.switch_page("streamlit_app.py")
 
-# --- TAB 1: USER MANAGEMENT ---
-with tab_users:
-    st.subheader("Manage Enterprise Users")
-    
-    # User Creation Form
-    with st.expander("➕ Register New User"):
-        with st.form("new_user_form"):
-            col1, col2 = st.columns(2)
-            new_email = col1.text_input("Email")
-            new_name = col2.text_input("Full Name")
-            new_pass = col1.text_input("Password", type="password")
-            new_role = col2.selectbox("Role", [1, 2, 3], format_func=lambda x: {1:"Admin", 2:"Manager", 3:"Staff"}[x])
-            
-            if st.form_submit_button("Create User"):
-                payload = {"email": new_email, "full_name": new_name, "password": new_pass, "role_id": new_role}
-                res = requests.post(f"{API_URL}/users/", json=payload, headers=headers)
-                if res.status_code in [200, 201]:
-                    st.success(f"User {new_name} created successfully!")
-                    st.rerun()
-                else:
-                    st.error(f"Error: {res.text}")
+st.divider()
 
-    st.divider()
-    
-    # User List Table
-    st.write("### Existing Users Directory")
-    users_res = requests.get(f"{API_URL}/users/", headers=headers)
-    if users_res.status_code == 200:
-        df_users = pd.DataFrame(users_res.json())
-        # Display clean table
-        st.dataframe(df_users[['id', 'full_name', 'email', 'role_id', 'is_active']], use_container_width=True)
-        
-        # Role Update Section
-        st.subheader("🔄 Update User Role")
-        c1, c2, c3 = st.columns([1, 2, 1])
-        u_id = c1.number_input("User ID", min_value=1)
-        r_id = c2.selectbox("New Role", [1, 2, 3], format_func=lambda x: {1:"Admin", 2:"Manager", 3:"Staff"}[x])
-        if c3.button("Update Role"):
-            requests.patch(f"{API_URL}/users/{u_id}", json={"role_id": r_id}, headers=headers)
-            st.success("Role Updated!")
-            st.rerun()
+# --- ADMIN UI CONTENT ---
+st.info("Authentication Verified. Admin session is active.")
 
-# --- TAB 2: KPI CONFIGURATION ---
-with tab_kpis:
-    st.subheader("Global KPI Definitions")
-    
-    # KPI Creation Form
-    with st.form("new_kpi"):
-        col1, col2, col3 = st.columns([2, 1, 1])
-        k_name = col1.text_input("KPI Name (e.g., Code Review)")
-        k_target = col2.number_input("Target Value", min_value=1.0, value=100.0)
-        k_weight = col3.slider("Weightage (%)", 1, 100, 20)
-        k_role = st.selectbox("Assign to Role", [1, 2, 3], format_func=lambda x: {1:"Admin", 2:"Manager", 3:"Staff"}[x])
-        
-        if st.form_submit_button("Add KPI"):
-            payload = {"name": k_name, "target_value": k_target, "weightage": k_weight, "role_id": k_role}
-            requests.post(f"{API_URL}/kpis/", json=payload, headers=headers)
-            st.success("KPI Added!")
-            st.rerun()
+# Example layout for Admin Tasks
+tab1, tab2 = st.tabs(["User Management", "System Logs"])
 
-    # KPI List Table
-    kpis_res = requests.get(f"{API_URL}/kpis/", headers=headers)
-    if kpis_res.status_code == 200:
-        st.table(pd.DataFrame(kpis_res.json())[['id', 'name', 'target_value', 'weightage', 'role_id']])
-    
-    # Delete KPI
-    st.divider()
-    del_col1, del_col2 = st.columns([1, 3])
-    del_id = del_col1.number_input("KPI ID to Delete", min_value=1)
-    if del_col2.button("🗑️ Delete KPI"):
-        requests.delete(f"{API_URL}/kpis/{del_id}", headers=headers)
-        st.warning(f"KPI {del_id} Deleted.")
-        st.rerun()
+with tab1:
+    st.subheader("Manage Users")
+    st.write("Fetching user directory from API...")
+    # Your GET /users/ logic goes here using headers={"Authorization": f"Bearer {st.session_state.token}"}
+
+with tab2:
+    st.subheader("Recent System Activity")
+    st.write("Viewing audit logs...")

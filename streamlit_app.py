@@ -1,66 +1,62 @@
 import streamlit as st
 import requests
-from datetime import datetime
 
 # --- CONFIGURATION ---
 API_URL = "http://13.61.15.68:8000"
-st.set_page_config(page_title="KPI Enterprise Portal", layout="wide")
+st.set_page_config(page_title="KPI Portal", layout="wide")
 
-# --- SESSION STATE ---
-if "token" not in st.session_state: st.session_state.token = None
-if "user" not in st.session_state: st.session_state.user = None
+# --- SESSION INITIALIZATION ---
+if "token" not in st.session_state:
+    st.session_state.token = None
+if "user" not in st.session_state:
+    st.session_state.user = None
 
 def logout():
     st.session_state.token = None
     st.session_state.user = None
     st.rerun()
 
-# --- LOGIN SCREEN ---
+# --- LOGIN GUARD ---
 if not st.session_state.token:
-    st.title("🔐 Enterprise Login")
-    with st.container(border=True):
-        email = st.text_input("Corporate Email")
+    st.title("🔑 Corporate Login")
+    
+    with st.form("login_form"):
+        email = st.text_input("Email")
         password = st.text_input("Password", type="password")
-        if st.button("Login", use_container_width=True):
+        submit = st.form_submit_button("Login", use_container_width=True)
+        
+        if submit:
             try:
+                # API Call to get JWT
                 res = requests.post(f"{API_URL}/token", data={"username": email, "password": password})
+                
                 if res.status_code == 200:
                     st.session_state.token = res.json()["access_token"]
+                    
+                    # Fetch Profile to verify Role
                     headers = {"Authorization": f"Bearer {st.session_state.token}"}
-                    u_res = requests.get(f"{API_URL}/users/me", headers=headers)
-                    if u_res.status_code == 200:
-                        st.session_state.user = u_res.json()
+                    user_res = requests.get(f"{API_URL}/users/me", headers=headers)
+                    
+                    if user_res.status_code == 200:
+                        st.session_state.user = user_res.json()
+                        st.success("Login successful!")
                         st.rerun()
+                    else:
+                        st.error("Could not retrieve user profile.")
                 else:
-                    st.error("Invalid Credentials.")
+                    st.error("Invalid email or password.")
             except Exception as e:
-                st.error(f"Backend Offline: {e}")
+                st.error(f"System Error: Connection to backend failed.")
     st.stop()
 
-# --- LOGGED IN SIDEBAR ---
-# Streamlit will automatically show files from /pages/ here.
+# --- LOGGED IN HEADER ---
 u = st.session_state.user
-role_map = {1: "Admin", 2: "Manager", 3: "Staff"}
-
 with st.sidebar:
-    st.title("🚀 KPI Portal")
-    st.info(f"👤 **{u.get('full_name')}**\n\nRole: {role_map.get(u.get('role_id'), 'User')}")
-    if st.button("Logout"): logout()
+    st.markdown(f"### 👤 {u.get('full_name', 'User')}")
+    st.caption(f"📧 {u.get('email')}")
+    st.divider()
+    if st.button("Logout", use_container_width=True):
+        logout()
 
-# --- MAIN DASHBOARD CONTENT ---
-st.title(f"👋 Welcome, {u.get('full_name')}")
-st.write("### Personal Performance Summary")
-
-# Metric Fetching
-headers = {"Authorization": f"Bearer {st.session_state.token}"}
-now = datetime.now()
-try:
-    res = requests.get(f"{API_URL}/users/{u['id']}/score?month={now.month}&year={now.year}", headers=headers)
-    if res.status_code == 200:
-        score = res.json().get("total_weighted_score", 0)
-        st.metric("My Current Score", f"{score}%")
-        st.progress(min(score/100, 1.0))
-except:
-    st.info("Performance metrics will appear here once achievements are verified.")
-
-st.success("Please use the sidebar to navigate to other modules.")
+st.title("🏠 Dashboard")
+st.write(f"Welcome back, **{u.get('full_name')}**. Use the sidebar to navigate.")
