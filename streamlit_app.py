@@ -119,10 +119,7 @@ def main():
 
     page = st.sidebar.radio(
         "Navigation",
-        ["Users"],
-        ["Roles"],
-        ["KPIs"]
-    )
+        ["Users, Roles, KPIs"])
 
     if st.sidebar.button("Logout"):
         st.session_state.clear()
