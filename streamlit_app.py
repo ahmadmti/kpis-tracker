@@ -128,6 +128,8 @@ def main():
 
     if page == "Users":
         users_page()
+    if page == "Roles":
+        from pages import Roles
 
 # -----------------------------
 main()
