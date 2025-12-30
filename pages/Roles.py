@@ -16,7 +16,17 @@ elif roles_resp.status_code != 200:
     st.error("Failed to load roles")
     st.stop()
 
-roles = roles_resp.json()
+raw_roles = roles_resp.json()
+
+# Normalize roles to avoid KeyError
+roles = [
+    {
+        "id": r.get("id"),
+        "name": r.get("name") or f"Role #{r.get('id')}"
+    }
+    for r in raw_roles
+    if r.get("id") is not None
+]
 
 perms_resp = get("/permissions")
 if perms_resp.status_code == 403:
@@ -28,7 +38,15 @@ elif perms_resp.status_code != 200:
 
 permissions = perms_resp.json()
 
-role = st.selectbox("Select Role", roles, format_func=lambda r: r["name"])
+role = st.selectbox(
+    "Select Role",
+    roles,
+    format_func=lambda r: r["name"]
+)
+if not role or "id" not in role:
+    st.error("Invalid role selected")
+    st.stop()
+
 
 if role["id"] == 1:
     st.warning(
