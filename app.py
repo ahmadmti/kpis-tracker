@@ -151,7 +151,8 @@ def update_manager(
 def create_kpi(
     kpi: schemas.KPICreate, 
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user)
+    current_user: models.User = Depends(auth.check_permission(models.PermissionType.SYSTEM_CONFIG))
+
 ):
     # Only Admin can define KPIs
     if current_user.role_id != 1:
@@ -187,7 +188,8 @@ def create_kpi(
 def create_kpi_override(
     override: schemas.KPIOverrideCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user)
+    current_user: models.User = Depends(auth.check_permission(models.PermissionType.SYSTEM_CONFIG))
+
 ):
     """Senior Logic: Admins can set custom targets for specific users."""
     # 1. Permission Check
@@ -256,7 +258,8 @@ def verify_achievement(
     achievement_id: int,
     data: schemas.AchievementVerify,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user)
+    current_user: models.User = Depends(auth.check_permission(models.PermissionType.USER_READ))
+
 ):
     """Senior Logic: Managerial verification with state-transition enforcement."""
     # 1. Fetch Achievement
@@ -325,7 +328,8 @@ def get_user_monthly_score(
 def run_evaluation(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user)
+    current_user: models.User = Depends(auth.check_permission(models.PermissionType.SYSTEM_CONFIG))
+
 ):
     """Senior Logic: Admin-triggered performance evaluation."""
     if current_user.role_id != 1:
@@ -349,7 +353,8 @@ def run_evaluation(
 @app.get("/admin/recommendations")
 def get_all_recommendations(
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user)
+    current_user: models.User = Depends(auth.check_permission(models.PermissionType.SYSTEM_CONFIG))
+
 ):
     """View all automated performance flags."""
     if current_user.role_id != 1:
@@ -432,15 +437,27 @@ def update_role_permissions(
     if current_user.role_id != 1:
         raise HTTPException(status_code=403)
 
+    # Protect Admin role (id = 1)
+    if role_id == 1:
+        protected = {
+            models.PermissionType.USER_READ.value,
+            models.PermissionType.SYSTEM_CONFIG.value
+        }
+    else:
+        protected = set()
+
     db.query(models.RolePermission).filter(
-        models.RolePermission.role_id == role_id
+        models.RolePermission.role_id == role_id,
+        ~models.RolePermission.permission_name.in_(protected)
     ).delete()
+
 
     for perm in permissions:
         db.add(models.RolePermission(
             role_id=role_id,
             permission_name=perm
         ))
+        
 
     db.commit()
     return {"status": "updated"}
