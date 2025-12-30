@@ -1,8 +1,12 @@
 import streamlit as st
 from api_client import get, put
-import models
 
 st.title("Roles & Permissions")
+
+PROTECTED_ADMIN_PERMISSIONS = [
+    "system:config",
+    "user:read",
+]
 
 roles_resp = get("/roles")
 if roles_resp.status_code == 403:
@@ -24,8 +28,8 @@ elif perms_resp.status_code != 200:
 
 permissions = perms_resp.json()
 
-
 role = st.selectbox("Select Role", roles, format_func=lambda r: r["name"])
+
 if role["id"] == 1:
     st.warning(
         "Admin role has protected permissions. "
@@ -47,10 +51,7 @@ st.subheader("Permissions")
 selected = []
 for p in permissions:
     checked = p["key"] in assigned
-    disabled = role["id"] == 1 and p["key"] in [
-        models.PermissionType.SYSTEM_CONFIG.value,
-        models.PermissionType.USER_READ.value,
-    ]
+    disabled = role["id"] == 1 and p["key"] in PROTECTED_ADMIN_PERMISSIONS
 
     if st.checkbox(
         p["key"],
@@ -58,7 +59,6 @@ for p in permissions:
         disabled=disabled
     ):
         selected.append(p["key"])
-
 
 if st.button("Save Permissions"):
     put(f"/roles/{role['id']}/permissions", json=selected)
