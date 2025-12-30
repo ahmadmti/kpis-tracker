@@ -7,6 +7,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 import models, database
+from database import get_db
 
 # Configuration
 SECRET_KEY = os.environ.get("SECRET_KEY", "DEVELOPMENT_SECRET_KEY_CHANGE_ME")
@@ -47,3 +48,26 @@ def get_current_user(db: Session = Depends(database.get_db), token: str = Depend
     if user is None:
         raise credentials_exception
     return user
+
+def check_permission(required_permission):
+    def dependency(
+        current_user: models.User = Depends(get_current_user),
+        db: Session = Depends(get_db)
+    ):
+        perms = (
+            db.query(models.RolePermission.permission_name)
+            .filter(models.RolePermission.role_id == current_user.role_id)
+            .all()
+        )
+
+        permission_set = {p[0] for p in perms}
+
+        if required_permission.value not in permission_set:
+            raise HTTPException(
+                status_code=403,
+                detail="Permission denied"
+            )
+
+        return current_user
+
+    return dependency
