@@ -1,74 +1,23 @@
 import streamlit as st
-import requests
-from api_client import API_BASE, api_headers
+from api_client import get, put
 
-st.set_page_config(page_title="Roles Overview", layout="wide")
+st.title("Roles & Permissions")
 
-st.title("Roles Overview (Read-Only)")
+roles = get("/roles").json()
+permissions = get("/permissions").json()
 
-st.info(
-    "Roles are currently system-defined (role_id based). "
-    "This page shows how roles are being used across users and KPIs."
-)
+role = st.selectbox("Select Role", roles, format_func=lambda r: r["name"])
 
-# -------------------------
-# Fetch users
-# -------------------------
-users_resp = requests.get(f"{API_BASE}/users/", headers=api_headers())
-if users_resp.status_code != 200:
-    st.error("Failed to load users")
-    st.stop()
+assigned = get(f"/roles/{role['id']}/permissions").json()
 
-users = users_resp.json()
+st.subheader("Permissions")
 
-# -------------------------
-# Build role → users map
-# -------------------------
-role_map = {}
-for u in users:
-    rid = u.get("role_id")
-    role_map.setdefault(rid, []).append(u)
+selected = []
+for p in permissions:
+    checked = p["key"] in assigned
+    if st.checkbox(p["key"], value=checked):
+        selected.append(p["key"])
 
-st.subheader("Role → Users Mapping")
-
-for role_id, role_users in role_map.items():
-    with st.expander(f"Role ID: {role_id} ({len(role_users)} users)"):
-        st.table([
-            {
-                "User ID": u["id"],
-                "Name": u["full_name"],
-                "Email": u["email"],
-                "Active": u["is_active"]
-            }
-            for u in role_users
-        ])
-
-# -------------------------
-# Fetch KPIs
-# -------------------------
-st.divider()
-st.subheader("Role → KPIs Mapping")
-
-kpi_resp = requests.get(f"{API_BASE}/kpis/", headers=api_headers())
-if kpi_resp.status_code != 200:
-    st.warning("KPIs endpoint not available or restricted")
-    st.stop()
-
-kpis = kpi_resp.json()
-
-kpi_role_map = {}
-for k in kpis:
-    kpi_role_map.setdefault(k["role_id"], []).append(k)
-
-for role_id, role_kpis in kpi_role_map.items():
-    with st.expander(f"Role ID: {role_id} ({len(role_kpis)} KPIs)"):
-        st.table([
-            {
-                "KPI ID": k["id"],
-                "Name": k["name"],
-                "Target": k["target_value"],
-                "Weightage": k["weightage"],
-                "Type": k["measurement_type"]
-            }
-            for k in role_kpis
-        ])
+if st.button("Save Permissions"):
+    put(f"/roles/{role['id']}/permissions", json=selected)
+    st.success("Permissions updated")

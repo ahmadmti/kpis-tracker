@@ -408,3 +408,41 @@ def export_report(
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
+@app.get("/roles")
+def get_roles(db: Session = Depends(get_db)):
+    return db.query(models.Role).all()
+
+@app.get("/permissions")
+def get_permissions():
+    return [{"key": p.value} for p in models.PermissionType]
+
+@app.get("/roles/{role_id}/permissions")
+def get_role_permissions(role_id: int, db: Session = Depends(get_db)):
+    perms = db.query(models.RolePermission).filter(
+        models.RolePermission.role_id == role_id
+    ).all()
+    return [p.permission_name for p in perms]
+@app.put("/roles/{role_id}/permissions")
+def update_role_permissions(
+    role_id: int,
+    permissions: list[str],
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    if current_user.role_id != 1:
+        raise HTTPException(status_code=403)
+
+    db.query(models.RolePermission).filter(
+        models.RolePermission.role_id == role_id
+    ).delete()
+
+    for perm in permissions:
+        db.add(models.RolePermission(
+            role_id=role_id,
+            permission_name=perm
+        ))
+
+    db.commit()
+    return {"status": "updated"}
+
+
