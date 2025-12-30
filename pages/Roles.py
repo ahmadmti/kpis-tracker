@@ -4,8 +4,26 @@ import models
 
 st.title("Roles & Permissions")
 
-roles = get("/roles").json()
-permissions = get("/permissions").json()
+roles_resp = get("/roles")
+if roles_resp.status_code == 403:
+    st.error("You do not have permission to view roles.")
+    st.stop()
+elif roles_resp.status_code != 200:
+    st.error("Failed to load roles")
+    st.stop()
+
+roles = roles_resp.json()
+
+perms_resp = get("/permissions")
+if perms_resp.status_code == 403:
+    st.error("You do not have permission to view permissions.")
+    st.stop()
+elif perms_resp.status_code != 200:
+    st.error("Failed to load permissions")
+    st.stop()
+
+permissions = perms_resp.json()
+
 
 role = st.selectbox("Select Role", roles, format_func=lambda r: r["name"])
 if role["id"] == 1:
@@ -14,7 +32,15 @@ if role["id"] == 1:
         "Critical permissions cannot be removed."
     )
 
-assigned = get(f"/roles/{role['id']}/permissions").json()
+assigned_resp = get(f"/roles/{role['id']}/permissions")
+if assigned_resp.status_code == 403:
+    st.error("You do not have permission to view role permissions.")
+    st.stop()
+elif assigned_resp.status_code != 200:
+    st.error("Failed to load role permissions")
+    st.stop()
+
+assigned = assigned_resp.json()
 
 st.subheader("Permissions")
 
