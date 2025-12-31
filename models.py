@@ -84,21 +84,19 @@ class Achievement(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     kpi_id = Column(Integer, ForeignKey("kpis.id"), nullable=False)
-    verifier_id = Column(Integer, ForeignKey("users.id"), nullable=True) # <--- Must be above the relationship
+    verifier_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     achieved_value = Column(Float, nullable=False) # Must be >= 0
     description = Column(String)
     evidence_url = Column(String) # URL to proof
     achievement_date = Column(DateTime, default=datetime.now(timezone.utc))
     status = Column(Enum(AchievementStatus), default=AchievementStatus.PENDING)
+    verified_at = Column(DateTime, nullable=True)
+    rejection_reason = Column(String, nullable=True)
 
     # Relationships
     user = relationship("User", foreign_keys="[Achievement.user_id]", backref="my_achievements")
     verifier = relationship("User", foreign_keys="[Achievement.verifier_id]", backref="verified_achievements")
-    #user = relationship("User")
     kpi = relationship("KPI")
-    verifier_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    verified_at = Column(DateTime, nullable=True)
-    rejection_reason = Column(String, nullable=True)
 
 class ActionType(str, enum.Enum):
     CREATE = "CREATE"
@@ -145,4 +143,16 @@ class AutomationRule(Base):
     period = Column(String, nullable=False) # e.g., "2025-12"
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
+    user = relationship("User")
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    token = Column(String, unique=True, nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    used = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    
     user = relationship("User")

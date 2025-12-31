@@ -1,15 +1,17 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy import func
+from sqlalchemy import func, extract
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from database import engine, Base, get_db
 import models, schemas, auth
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import services
 import audit, automation
 from fastapi.responses import Response
 import reports
+import secrets
+import uuid
 
 Base.metadata.create_all(bind=engine)
 
@@ -468,5 +470,322 @@ def update_role_permissions(
 
     db.commit()
     return {"status": "updated"}
+
+# ==================== PASSWORD MANAGEMENT ====================
+
+@app.post("/auth/forgot-password")
+def forgot_password(request: schemas.ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """Generate password reset token and send email (simplified - just returns token for now)"""
+    user = db.query(models.User).filter(models.User.email == request.email).first()
+    if not user:
+        # Don't reveal if email exists
+        return {"message": "If the email exists, a password reset link has been sent."}
+    
+    # Generate secure token
+    reset_token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+    
+    # Invalidate old tokens
+    db.query(models.PasswordResetToken).filter(
+        models.PasswordResetToken.user_id == user.id,
+        models.PasswordResetToken.used == False
+    ).update({"used": True})
+    
+    # Create new token
+    db_token = models.PasswordResetToken(
+        user_id=user.id,
+        token=reset_token,
+        expires_at=expires_at
+    )
+    db.add(db_token)
+    db.commit()
+    
+    # In production, send email with reset link
+    # For now, return token (in production, this should be sent via email)
+    return {"message": "Password reset token generated", "token": reset_token}
+
+@app.post("/auth/reset-password")
+def reset_password(request: schemas.ResetPasswordRequest, db: Session = Depends(get_db)):
+    """Reset password using token"""
+    token_record = db.query(models.PasswordResetToken).filter(
+        models.PasswordResetToken.token == request.token,
+        models.PasswordResetToken.used == False,
+        models.PasswordResetToken.expires_at > datetime.now(timezone.utc)
+    ).first()
+    
+    if not token_record:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+    
+    # Update password
+    user = db.query(models.User).filter(models.User.id == token_record.user_id).first()
+    user.password_hash = auth.get_password_hash(request.new_password)
+    token_record.used = True
+    db.commit()
+    
+    audit.log_action(
+        db, user_id=user.id, action=models.ActionType.UPDATE,
+        entity=models.EntityType.USER, entity_id=user.id,
+        description="Password reset via forgot password"
+    )
+    
+    return {"message": "Password reset successfully"}
+
+@app.post("/auth/change-password")
+def change_password(
+    request: schemas.ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Change password for logged-in user"""
+    if not auth.verify_password(request.current_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    
+    current_user.password_hash = auth.get_password_hash(request.new_password)
+    db.commit()
+    
+    audit.log_action(
+        db, user_id=current_user.id, action=models.ActionType.UPDATE,
+        entity=models.EntityType.USER, entity_id=current_user.id,
+        description="Password changed"
+    )
+    
+    return {"message": "Password changed successfully"}
+
+# ==================== DASHBOARD ENDPOINTS ====================
+
+@app.get("/dashboard/admin")
+def admin_dashboard(
+    month: Optional[int] = None,
+    year: Optional[int] = None,
+    user_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Admin dashboard with filtering by date and user"""
+    if current_user.role_id != 1:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    now = datetime.now(timezone.utc)
+    filter_month = month or now.month
+    filter_year = year or now.year
+    
+    # Get users to display
+    if user_id:
+        users = db.query(models.User).filter(models.User.id == user_id).all()
+    else:
+        users = db.query(models.User).all()
+    
+    dashboard_data = []
+    for user in users:
+        score = services.calculate_user_kpi_score(db, user.id, filter_month, filter_year)
+        
+        # Get achievements for this user/period
+        achievements = db.query(models.Achievement).filter(
+            models.Achievement.user_id == user.id,
+            extract('month', models.Achievement.achievement_date) == filter_month,
+            extract('year', models.Achievement.achievement_date) == filter_year
+        ).all()
+        
+        achievement_list = [{
+            "id": a.id,
+            "kpi_id": a.kpi_id,
+            "achieved_value": a.achieved_value,
+            "status": a.status.value,
+            "description": a.description,
+            "achievement_date": a.achievement_date.isoformat() if a.achievement_date else None
+        } for a in achievements]
+        
+        dashboard_data.append({
+            "user_id": user.id,
+            "full_name": user.full_name,
+            "email": user.email,
+            "total_weighted_score": score,
+            "period": f"{filter_year}-{filter_month:02d}",
+            "achievements": achievement_list
+        })
+    
+    return {
+        "user_scores": dashboard_data,
+        "total_users": len(users),
+        "period": f"{filter_year}-{filter_month:02d}"
+    }
+
+@app.get("/dashboard/manager")
+def manager_dashboard(
+    month: Optional[int] = None,
+    year: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Manager dashboard - own + team performance"""
+    now = datetime.now(timezone.utc)
+    filter_month = month or now.month
+    filter_year = year or now.year
+    
+    # Get manager's own score
+    own_score = services.calculate_user_kpi_score(db, current_user.id, filter_month, filter_year)
+    
+    # Get team members (direct subordinates)
+    team_members = db.query(models.User).filter(
+        models.User.manager_id == current_user.id
+    ).all()
+    
+    team_data = []
+    for member in team_members:
+        score = services.calculate_user_kpi_score(db, member.id, filter_month, filter_year)
+        team_data.append({
+            "user_id": member.id,
+            "full_name": member.full_name,
+            "email": member.email,
+            "total_weighted_score": score,
+            "period": f"{filter_year}-{filter_month:02d}"
+        })
+    
+    return {
+        "manager": {
+            "user_id": current_user.id,
+            "full_name": current_user.full_name,
+            "email": current_user.email,
+            "total_weighted_score": own_score,
+            "period": f"{filter_year}-{filter_month:02d}"
+        },
+        "team": team_data,
+        "period": f"{filter_year}-{filter_month:02d}"
+    }
+
+@app.get("/dashboard/sdr")
+def sdr_dashboard(
+    month: Optional[int] = None,
+    year: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """SDR dashboard - own performance"""
+    now = datetime.now(timezone.utc)
+    filter_month = month or now.month
+    filter_year = year or now.year
+    
+    score = services.calculate_user_kpi_score(db, current_user.id, filter_month, filter_year)
+    
+    # Get user's KPIs
+    role_kpis = db.query(models.KPI).filter(models.KPI.role_id == current_user.role_id).all()
+    
+    # Get achievements
+    achievements = db.query(models.Achievement).filter(
+        models.Achievement.user_id == current_user.id,
+        extract('month', models.Achievement.achievement_date) == filter_month,
+        extract('year', models.Achievement.achievement_date) == filter_year
+    ).all()
+    
+    kpi_details = []
+    for kpi in role_kpis:
+        # Check for override
+        override = db.query(models.KPIOverride).filter(
+            models.KPIOverride.user_id == current_user.id,
+            models.KPIOverride.kpi_id == kpi.id
+        ).first()
+        target = override.custom_target_value if override else kpi.target_value
+        
+        # Get verified achievements for this KPI
+        kpi_achievements = [a for a in achievements if a.kpi_id == kpi.id and a.status == models.AchievementStatus.VERIFIED]
+        achieved_sum = sum(a.achieved_value for a in kpi_achievements)
+        
+        kpi_details.append({
+            "kpi_id": kpi.id,
+            "name": kpi.name,
+            "target_value": target,
+            "achieved_value": achieved_sum,
+            "weightage": kpi.weightage,
+            "status": "completed" if achieved_sum >= target else "in_progress"
+        })
+    
+    return {
+        "user_id": current_user.id,
+        "full_name": current_user.full_name,
+        "email": current_user.email,
+        "total_weighted_score": score,
+        "period": f"{filter_year}-{filter_month:02d}",
+        "kpis": kpi_details,
+        "achievements": [{
+            "id": a.id,
+            "kpi_id": a.kpi_id,
+            "achieved_value": a.achieved_value,
+            "status": a.status.value,
+            "description": a.description
+        } for a in achievements]
+    }
+
+@app.get("/kpis/")
+def list_kpis(
+    role_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """List KPIs, optionally filtered by role"""
+    query = db.query(models.KPI)
+    if role_id:
+        query = query.filter(models.KPI.role_id == role_id)
+    
+    kpis = query.all()
+    
+    # Convert to dict format
+    return [{
+        "id": k.id,
+        "name": k.name,
+        "description": k.description,
+        "category": k.category,
+        "target_value": k.target_value,
+        "weightage": k.weightage,
+        "measurement_type": k.measurement_type.value if k.measurement_type else None,
+        "role_id": k.role_id,
+        "period": k.period.value if k.period else None
+    } for k in kpis]
+
+@app.get("/achievements/")
+def list_achievements(
+    user_id: Optional[int] = None,
+    status_filter: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """List achievements with optional filters"""
+    query = db.query(models.Achievement)
+    
+    # Role-based filtering
+    if current_user.role_id == 1:  # Admin sees all
+        if user_id:
+            query = query.filter(models.Achievement.user_id == user_id)
+    elif current_user.role_id == 2:  # Manager sees own + team
+        team_user_ids = [u.id for u in db.query(models.User).filter(
+            models.User.manager_id == current_user.id
+        ).all()]
+        team_user_ids.append(current_user.id)
+        query = query.filter(models.Achievement.user_id.in_(team_user_ids))
+    else:  # SDR sees only own
+        query = query.filter(models.Achievement.user_id == current_user.id)
+    
+    if status_filter:
+        try:
+            status_enum = models.AchievementStatus(status_filter)
+            query = query.filter(models.Achievement.status == status_enum)
+        except ValueError:
+            pass  # Invalid status, ignore filter
+    
+    achievements = query.all()
+    
+    # Convert to dict format
+    return [{
+        "id": a.id,
+        "user_id": a.user_id,
+        "kpi_id": a.kpi_id,
+        "achieved_value": a.achieved_value,
+        "description": a.description,
+        "evidence_url": a.evidence_url,
+        "achievement_date": a.achievement_date.isoformat() if a.achievement_date else None,
+        "status": a.status.value if a.status else None,
+        "verifier_id": a.verifier_id,
+        "verified_at": a.verified_at.isoformat() if a.verified_at else None,
+        "rejection_reason": a.rejection_reason
+    } for a in achievements]
 
 
