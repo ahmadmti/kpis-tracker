@@ -230,7 +230,12 @@ def create_kpi_override(
         return existing
 
     # 3. Create new override
-    db_override = models.KPIOverride(**override.model_dump())
+    # Handle both Pydantic v1 and v2
+    try:
+        override_data = override.model_dump() if hasattr(override, 'model_dump') else override.dict()
+    except:
+        override_data = override.dict()
+    db_override = models.KPIOverride(**override_data)
     db.add(db_override)
     db.commit()
     db.refresh(db_override)
