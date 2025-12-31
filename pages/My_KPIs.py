@@ -38,7 +38,7 @@ for kpi in kpis:
         st.write(f"**Category:** {kpi.get('category', 'N/A')}")
         st.write(f"**Target Value:** {kpi.get('target_value', 0)}")
         st.write(f"**Measurement Type:** {kpi.get('measurement_type', 'N/A')}")
-        st.write(f"**Period:** {kpi.get('period', 'N/A')}")
+        st.write(f"**Frequency:** {kpi.get('period', 'N/A')}")
         
         # Check for override
         override_resp = requests.get(

@@ -22,19 +22,31 @@ if resp.status_code != 200:
 
 achievements = resp.json()
 
-pending = [a for a in achievements if a["status"] == "PENDING"]
+pending = [a for a in achievements if a.get("status") == "PENDING"]
 
 if not pending:
     st.success("No pending achievements 🎉")
     st.stop()
 
+# Get user and KPI names
+users_resp = requests.get(f"{API_BASE}/users/", headers=api_headers())
+users_dict = {u.get('id'): u.get('full_name', 'Unknown') for u in users_resp.json()} if users_resp.status_code == 200 else {}
+
+kpis_resp = requests.get(f"{API_BASE}/kpis/", headers=api_headers())
+kpis_dict = {k.get('id'): k.get('name', 'Unknown') for k in kpis_resp.json()} if kpis_resp.status_code == 200 else {}
+
 # -----------------------------------
 # Display & actions
 # -----------------------------------
 for ach in pending:
-    with st.expander(f"Achievement #{ach['id']} | User {ach['user_id']} | KPI {ach['kpi_id']}"):
-        st.write(f"**Achieved Value:** {ach['achieved_value']}")
-        st.write(f"**Description:** {ach['description']}")
+    user_name = users_dict.get(ach.get('user_id'), f"User {ach.get('user_id')}")
+    kpi_name = kpis_dict.get(ach.get('kpi_id'), f"KPI {ach.get('kpi_id')}")
+    
+    with st.expander(f"Achievement #{ach.get('id')} | {user_name} | {kpi_name}"):
+        st.write(f"**User:** {user_name}")
+        st.write(f"**KPI:** {kpi_name}")
+        st.write(f"**Achieved Value:** {ach.get('achieved_value', 0)}")
+        st.write(f"**Description:** {ach.get('description', 'N/A')}")
 
         if ach.get("evidence_url"):
             st.markdown(f"[Evidence Link]({ach['evidence_url']})")
@@ -43,10 +55,10 @@ for ach in pending:
 
         # VERIFY
         with col1:
-            if st.button(f"✅ Verify #{ach['id']}"):
+            if st.button(f"✅ Verify", key=f"verify_{ach.get('id')}"):
                 verify_payload = {"status": "VERIFIED"}
                 vr = requests.put(
-                    f"{API_BASE}/achievements/{ach['id']}/verify",
+                    f"{API_BASE}/achievements/{ach.get('id')}/verify",
                     json=verify_payload,
                     headers=api_headers()
                 )
@@ -55,16 +67,20 @@ for ach in pending:
                     st.success("Achievement verified")
                     st.rerun()
                 else:
-                    st.error(vr.json())
+                    try:
+                        error = vr.json()
+                        st.error(error.get("detail", str(error)))
+                    except:
+                        st.error(vr.text)
 
         # REJECT
         with col2:
             reason = st.text_input(
-                f"Rejection reason #{ach['id']}",
-                key=f"reason_{ach['id']}"
+                "Rejection reason",
+                key=f"reason_{ach.get('id')}"
             )
 
-            if st.button(f"❌ Reject #{ach['id']}"):
+            if st.button(f"❌ Reject", key=f"reject_{ach.get('id')}"):
                 if not reason:
                     st.warning("Rejection reason is required")
                 else:
@@ -74,7 +90,7 @@ for ach in pending:
                     }
 
                     rr = requests.put(
-                        f"{API_BASE}/achievements/{ach['id']}/verify",
+                        f"{API_BASE}/achievements/{ach.get('id')}/verify",
                         json=reject_payload,
                         headers=api_headers()
                     )
@@ -83,4 +99,8 @@ for ach in pending:
                         st.success("Achievement rejected")
                         st.rerun()
                     else:
-                        st.error(rr.json())
+                        try:
+                            error = rr.json()
+                            st.error(error.get("detail", str(error)))
+                        except:
+                            st.error(rr.text)

@@ -44,7 +44,10 @@ class MeasurementType(str, enum.Enum):
     PERCENTAGE = "PERCENTAGE"
 
 class PeriodType(str, enum.Enum):
+    DAILY = "DAILY"
+    WEEKLY = "WEEKLY"
     MONTHLY = "MONTHLY"
+    QUARTERLY = "QUARTERLY"
 
 class KPI(Base):
     __tablename__ = "kpis"
@@ -56,7 +59,7 @@ class KPI(Base):
     target_value = Column(Float, nullable=False) # Must be > 0
     weightage = Column(Float, nullable=False)    # 0 to 100
     measurement_type = Column(Enum(MeasurementType), nullable=False)
-    period = Column(Enum(PeriodType), default=PeriodType.MONTHLY)
+    period = Column(Enum(PeriodType), default=PeriodType.MONTHLY, nullable=False)
     
     # Links KPI to a specific Role
     role_id = Column(Integer, ForeignKey("roles.id"), nullable=False)

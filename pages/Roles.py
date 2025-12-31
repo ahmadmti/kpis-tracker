@@ -38,11 +38,20 @@ elif perms_resp.status_code != 200:
 
 permissions = perms_resp.json()
 
-role = st.selectbox(
+if not roles:
+    st.error("No roles available")
+    st.stop()
+
+# Use index-based selection to avoid dict issues
+role_options = [r["name"] for r in roles]
+selected_index = st.selectbox(
     "Select Role",
-    roles,
-    format_func=lambda r: r["name"]
+    range(len(role_options)),
+    format_func=lambda i: role_options[i]
 )
+
+role = roles[selected_index] if selected_index is not None else None
+
 if not role or "id" not in role:
     st.error("Invalid role selected")
     st.stop()

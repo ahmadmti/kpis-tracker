@@ -138,7 +138,28 @@ def users_page():
     st.subheader("Existing Users")
     if users:
         import pandas as pd
-        df = pd.DataFrame(users)
+        # Get roles for display
+        roles_resp = requests.get(f"{API_BASE}/roles", headers=api_headers())
+        roles_dict = {}
+        if roles_resp.status_code == 200:
+            roles_dict = {r.get('id'): r.get('name', 'Unknown') for r in roles_resp.json()}
+        
+        # Get managers for display
+        managers_dict = {u.get('id'): u.get('full_name', 'Unknown') for u in users}
+        
+        # Enhance user display with names
+        users_display = []
+        for u in users:
+            users_display.append({
+                "ID": u.get("id"),
+                "Full Name": u.get("full_name"),
+                "Email": u.get("email"),
+                "Role": roles_dict.get(u.get("role_id"), f"Role {u.get('role_id')}"),
+                "Manager": managers_dict.get(u.get("manager_id"), "None") if u.get("manager_id") else "None",
+                "Active": u.get("is_active", True)
+            })
+        
+        df = pd.DataFrame(users_display)
         st.dataframe(df, use_container_width=True)
     else:
         st.info("No users found")
@@ -153,7 +174,15 @@ def users_page():
             email = st.text_input("Email")
         with col2:
             password = st.text_input("Password", type="password")
-            role_id = st.number_input("Role ID", min_value=1, step=1, value=1)
+            # Get roles for dropdown
+            roles_resp = requests.get(f"{API_BASE}/roles", headers=api_headers())
+            if roles_resp.status_code == 200:
+                roles_list = roles_resp.json()
+                role_options = {f"{r.get('name', 'Unknown')}": r.get('id') for r in roles_list}
+                selected_role = st.selectbox("Role", list(role_options.keys()))
+                role_id = role_options[selected_role] if selected_role else 1
+            else:
+                role_id = st.number_input("Role ID", min_value=1, step=1, value=1)
         
         is_active = st.checkbox("Active", value=True)
         submitted = st.form_submit_button("Create User")
@@ -182,21 +211,41 @@ def users_page():
     st.divider()
     st.subheader("Assign Users to Manager")
     
-    with st.form("assign_manager"):
-        user_id = st.number_input("User ID", min_value=1, step=1, key="assign_user_id")
-        manager_id = st.number_input("Manager ID", min_value=1, step=1, key="assign_manager_id")
+    # Get all users for dropdowns
+    users_resp = requests.get(f"{API_BASE}/users/", headers=api_headers())
+    if users_resp.status_code == 200:
+        all_users_list = users_resp.json()
         
-        if st.form_submit_button("Assign Manager"):
-            resp = requests.put(
-                f"{API_BASE}/users/{user_id}/manager?manager_id={manager_id}",
-                headers=api_headers()
-            )
+        with st.form("assign_manager"):
+            # User dropdown
+            user_options = {f"{u['full_name']} ({u['email']})": u['id'] for u in all_users_list}
+            selected_user = st.selectbox("Select User", list(user_options.keys()))
+            user_id = user_options[selected_user] if selected_user else None
             
-            if resp.status_code == 200:
-                st.success("Manager assigned successfully")
-                st.rerun()
-            else:
-                st.error(api_error(resp))
+            # Manager dropdown (can be None for no manager)
+            manager_options = {"None (No Manager)": None}
+            manager_options.update({f"{u['full_name']} ({u['email']})": u['id'] for u in all_users_list})
+            selected_manager = st.selectbox("Select Manager", list(manager_options.keys()))
+            manager_id = manager_options[selected_manager] if selected_manager else None
+            
+            if st.form_submit_button("Assign Manager"):
+                if user_id:
+                    params = {}
+                    if manager_id:
+                        params["manager_id"] = manager_id
+                    resp = requests.put(
+                        f"{API_BASE}/users/{user_id}/manager",
+                        params=params,
+                        headers=api_headers()
+                    )
+                    
+                    if resp.status_code == 200:
+                        st.success("Manager assigned successfully")
+                        st.rerun()
+                    else:
+                        st.error(api_error(resp))
+    else:
+        st.error("Failed to load users")
 
 # -----------------------------
 # Admin Dashboard
@@ -211,10 +260,19 @@ def admin_dashboard_page():
     with col2:
         month = st.number_input("Month", min_value=1, max_value=12, value=datetime.now().month)
     with col3:
-        all_users = requests.get(f"{API_BASE}/users/", headers=api_headers()).json()
-        user_options = ["All Users"] + [f"{u['id']} - {u['full_name']}" for u in all_users]
-        selected_user = st.selectbox("Filter by User", user_options)
-        user_id = None if selected_user == "All Users" else int(selected_user.split(" - ")[0])
+        all_users_resp = requests.get(f"{API_BASE}/users/", headers=api_headers())
+        if all_users_resp.status_code == 200:
+            all_users = all_users_resp.json()
+            user_options = ["All Users"] + [f"{u['full_name']} ({u['email']})" for u in all_users]
+            selected_user = st.selectbox("Filter by User", user_options)
+            if selected_user == "All Users":
+                user_id = None
+            else:
+                # Find user ID from selected name
+                selected_email = selected_user.split("(")[1].split(")")[0] if "(" in selected_user else None
+                user_id = next((u['id'] for u in all_users if u['email'] == selected_email), None) if selected_email else None
+        else:
+            user_id = None
     
     # Fetch dashboard data
     params = {"month": month, "year": year}
@@ -264,20 +322,45 @@ def admin_dashboard_page():
         st.divider()
         st.subheader("📋 Achievement Details")
         
+        user_options = [f"{u['full_name']} ({u['email']})" for u in data["user_scores"]]
         selected_user_detail = st.selectbox(
             "Select User to View Details",
-            [f"{u['user_id']} - {u['full_name']}" for u in data["user_scores"]]
+            user_options
         )
         
         if selected_user_detail:
-            user_id_detail = int(selected_user_detail.split(" - ")[0])
-            user_detail = next(u for u in data["user_scores"] if u["user_id"] == user_id_detail)
+            # Find user by email
+            selected_email = selected_user_detail.split("(")[1].split(")")[0] if "(" in selected_user_detail else None
+            user_detail = next((u for u in data["user_scores"] if u["email"] == selected_email), None) if selected_email else None
+            
+            if not user_detail:
+                st.error("User not found")
+                return
             
             st.write(f"**User:** {user_detail['full_name']} ({user_detail['email']})")
             st.write(f"**Total Score:** {user_detail['total_weighted_score']}")
             
             if user_detail["achievements"]:
-                achievements_df = pd.DataFrame(user_detail["achievements"])
+                # Get KPI details including frequency
+                kpis_resp = requests.get(f"{API_BASE}/kpis/", headers=api_headers())
+                kpis_dict = {}
+                if kpis_resp.status_code == 200:
+                    kpis_dict = {k.get('id'): k for k in kpis_resp.json()}
+                
+                # Enhance achievements with KPI info
+                enhanced_achievements = []
+                for ach in user_detail["achievements"]:
+                    kpi_info = kpis_dict.get(ach.get('kpi_id'), {})
+                    enhanced_achievements.append({
+                        "ID": ach.get("id"),
+                        "KPI": kpi_info.get("name", f"KPI {ach.get('kpi_id')}"),
+                        "Frequency": kpi_info.get("period", "N/A"),
+                        "Achieved Value": ach.get("achieved_value"),
+                        "Status": ach.get("status"),
+                        "Date": ach.get("achievement_date", "")[:10] if ach.get("achievement_date") else ""
+                    })
+                
+                achievements_df = pd.DataFrame(enhanced_achievements)
                 st.dataframe(achievements_df, use_container_width=True)
             else:
                 st.info("No achievements for this period")
@@ -299,14 +382,21 @@ def decision_setup_page():
         recommendations = resp.json()
         if recommendations:
             import pandas as pd
+            # Get user names
+            users_resp = requests.get(f"{API_BASE}/users/", headers=api_headers())
+            users_dict = {}
+            if users_resp.status_code == 200:
+                users_dict = {u.get('id'): u.get('full_name', 'Unknown') for u in users_resp.json()}
+            
             df_data = []
             for rec in recommendations:
+                user_id = rec.get("user_id")
                 df_data.append({
-                    "User ID": rec.get("user_id"),
+                    "User": users_dict.get(user_id, f"User {user_id}"),
                     "Score": rec.get("score_achieved"),
                     "Recommendation": rec.get("recommendation"),
                     "Period": rec.get("period"),
-                    "Created": rec.get("created_at", "")
+                    "Created": rec.get("created_at", "")[:10] if rec.get("created_at") else ""
                 })
             df = pd.DataFrame(df_data)
             st.dataframe(df, use_container_width=True)
@@ -321,23 +411,36 @@ def decision_setup_page():
     st.write("- **50-69%**: Warning")
     st.write("- **<50%**: Final Warning / Termination")
     
-    with st.form("evaluate_user"):
-        user_id = st.number_input("User ID to Evaluate", min_value=1, step=1)
-        if st.form_submit_button("Run Evaluation"):
-            resp = requests.post(
-                f"{API_BASE}/admin/evaluate/{user_id}",
-                headers=api_headers()
-            )
+    # Get users for dropdown
+    users_resp = requests.get(f"{API_BASE}/users/", headers=api_headers())
+    if users_resp.status_code == 200:
+        users_list = users_resp.json()
+        user_options = {f"{u['full_name']} ({u['email']})": u['id'] for u in users_list}
+        
+        with st.form("evaluate_user"):
+            selected_user = st.selectbox("Select User to Evaluate", list(user_options.keys()))
+            user_id = user_options[selected_user] if selected_user else None
             
-            if resp.status_code == 200:
-                result = resp.json()
-                if "message" in result:
-                    st.success(result["message"])
+            if st.form_submit_button("Run Evaluation"):
+                if user_id:
+                    resp = requests.post(
+                        f"{API_BASE}/admin/evaluate/{user_id}",
+                        headers=api_headers()
+                    )
+                    
+                    if resp.status_code == 200:
+                        result = resp.json()
+                        if "message" in result:
+                            st.success(result["message"])
+                        else:
+                            st.success(f"Recommendation generated: {result.get('recommendation')}")
+                        st.rerun()
+                    else:
+                        st.error(api_error(resp))
                 else:
-                    st.success(f"Recommendation generated: {result.get('recommendation')}")
-                st.rerun()
-            else:
-                st.error(api_error(resp))
+                    st.error("Please select a user")
+    else:
+        st.error("Failed to load users")
 
 # -----------------------------
 # App Router

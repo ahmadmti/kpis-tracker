@@ -696,6 +696,7 @@ def sdr_dashboard(
             "target_value": target,
             "achieved_value": achieved_sum,
             "weightage": kpi.weightage,
+            "frequency": kpi.period.value if kpi.period else "MONTHLY",
             "status": "completed" if achieved_sum >= target else "in_progress"
         })
     

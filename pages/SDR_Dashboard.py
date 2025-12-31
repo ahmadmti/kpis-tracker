@@ -59,8 +59,8 @@ if data.get("kpis"):
     for kpi in data["kpis"]:
         progress = (kpi["achieved_value"] / kpi["target_value"] * 100) if kpi["target_value"] > 0 else 0
         kpi_df_data.append({
-            "KPI ID": kpi["kpi_id"],
             "Name": kpi["name"],
+            "Frequency": kpi.get("frequency", "N/A"),
             "Target": kpi["target_value"],
             "Achieved": kpi["achieved_value"],
             "Progress %": f"{progress:.1f}%",
@@ -75,7 +75,8 @@ if data.get("kpis"):
     st.subheader("Progress Visualization")
     for kpi in data["kpis"]:
         progress = (kpi["achieved_value"] / kpi["target_value"] * 100) if kpi["target_value"] > 0 else 0
-        st.write(f"**{kpi['name']}**")
+        frequency = kpi.get("frequency", "N/A")
+        st.write(f"**{kpi['name']}** (Frequency: {frequency})")
         st.progress(min(progress / 100, 1.0))
         st.write(f"{kpi['achieved_value']:.2f} / {kpi['target_value']:.2f} ({progress:.1f}%)")
         st.divider()
