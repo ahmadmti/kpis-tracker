@@ -13,7 +13,14 @@ import reports
 import secrets
 import uuid
 
-Base.metadata.create_all(bind=engine)
+# Create all tables - this will handle new columns/enums automatically
+# Note: For enum changes, existing databases may need manual update
+# But this ensures new installations work correctly
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    # Log but don't fail - tables might already exist
+    print(f"Note: Database initialization: {e}")
 
 app = FastAPI(title="KPIs Tracker")
 from fastapi.middleware.cors import CORSMiddleware
@@ -179,7 +186,12 @@ def create_kpi(
             detail=f"Total weightage for this role/period exceeds 100. (Current: {current_weight_sum})"
         )
 
-    db_kpi = models.KPI(**kpi.dict())
+    # Handle both Pydantic v1 and v2
+    try:
+        kpi_data = kpi.model_dump() if hasattr(kpi, 'model_dump') else kpi.dict()
+    except:
+        kpi_data = kpi.dict()
+    db_kpi = models.KPI(**kpi_data)
     db.add(db_kpi)
     db.commit()
     db.refresh(db_kpi)
@@ -247,8 +259,14 @@ def log_achievement(
         raise HTTPException(status_code=404, detail="KPI ID not found.")
 
     # 3. Save Entry (Status defaults to PENDING)
+    # Handle both Pydantic v1 and v2
+    try:
+        achievement_data = achievement.model_dump() if hasattr(achievement, 'model_dump') else achievement.dict()
+    except:
+        achievement_data = achievement.dict()
+    
     db_achievement = models.Achievement(
-        **achievement.model_dump(),
+        **achievement_data,
         user_id=current_user.id
     )
     
@@ -729,18 +747,33 @@ def list_kpis(
     
     kpis = query.all()
     
-    # Convert to dict format
-    return [{
-        "id": k.id,
-        "name": k.name,
-        "description": k.description,
-        "category": k.category,
-        "target_value": k.target_value,
-        "weightage": k.weightage,
-        "measurement_type": k.measurement_type.value if k.measurement_type else None,
-        "role_id": k.role_id,
-        "period": k.period.value if k.period else None
-    } for k in kpis]
+    # Convert to dict format with backward compatibility
+    result = []
+    for k in kpis:
+        # Handle period - might be None or old enum value
+        period_value = None
+        if k.period:
+            if hasattr(k.period, 'value'):
+                period_value = k.period.value
+            else:
+                period_value = str(k.period)
+        
+        # Default to MONTHLY if period is missing (backward compatibility)
+        if not period_value:
+            period_value = "MONTHLY"
+        
+        result.append({
+            "id": k.id,
+            "name": k.name,
+            "description": k.description,
+            "category": k.category,
+            "target_value": k.target_value,
+            "weightage": k.weightage,
+            "measurement_type": k.measurement_type.value if k.measurement_type else None,
+            "role_id": k.role_id,
+            "period": period_value
+        })
+    return result
 
 @app.get("/achievements/")
 def list_achievements(

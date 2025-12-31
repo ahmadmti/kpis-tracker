@@ -18,12 +18,26 @@ kpis = resp.json()
 
 st.subheader("Existing KPIs")
 
-# Get roles and users for display
-roles_resp = requests.get(f"{API_BASE}/roles", headers=api_headers())
-roles_dict = {r.get('id'): r.get('name', 'Unknown') for r in roles_resp.json()} if roles_resp.status_code == 200 else {}
+# Get roles and users for display with error handling
+try:
+    roles_resp = requests.get(f"{API_BASE}/roles", headers=api_headers())
+    if roles_resp.status_code == 200:
+        roles_data = roles_resp.json()
+        roles_dict = {r.get('id'): r.get('name', 'Unknown') for r in roles_data} if isinstance(roles_data, list) else {}
+    else:
+        roles_dict = {}
+except Exception:
+    roles_dict = {}
 
-users_resp = requests.get(f"{API_BASE}/users/", headers=api_headers())
-users_dict = {u.get('id'): u.get('full_name', 'Unknown') for u in users_resp.json()} if users_resp.status_code == 200 else {}
+try:
+    users_resp = requests.get(f"{API_BASE}/users/", headers=api_headers())
+    if users_resp.status_code == 200:
+        users_data = users_resp.json()
+        users_dict = {u.get('id'): u.get('full_name', 'Unknown') for u in users_data} if isinstance(users_data, list) else {}
+    else:
+        users_dict = {}
+except Exception:
+    users_dict = {}
 
 # Enhance KPI display with names
 import pandas as pd
@@ -118,50 +132,66 @@ st.divider()
 st.subheader("User KPI Override")
 
 with st.form("kpi_override"):
-    # Get users and KPIs for dropdowns
-    users_resp = requests.get(f"{API_BASE}/users/", headers=api_headers())
-    kpis_resp = requests.get(f"{API_BASE}/kpis/", headers=api_headers())
-    
-    if users_resp.status_code == 200 and kpis_resp.status_code == 200:
-        users_list = users_resp.json()
-        kpis_list = kpis_resp.json()
+    # Get users and KPIs for dropdowns with error handling
+    try:
+        users_resp = requests.get(f"{API_BASE}/users/", headers=api_headers())
+        kpis_resp = requests.get(f"{API_BASE}/kpis/", headers=api_headers())
         
-        user_options = {f"{u['full_name']} ({u['email']})": u['id'] for u in users_list}
-        kpi_options = {f"{k['name']} (Role: {roles_dict.get(k.get('role_id'), 'Unknown')})": k['id'] for k in kpis_list}
-        
-        selected_user = st.selectbox("Select User", list(user_options.keys()))
-        selected_kpi = st.selectbox("Select KPI", list(kpi_options.keys()))
-        custom_target_value = st.number_input("Custom Target Value", min_value=0.01)
-        
-        override_submit = st.form_submit_button("Apply Override")
-        
-        if override_submit:
-            user_id = user_options[selected_user] if selected_user else None
-            kpi_id = kpi_options[selected_kpi] if selected_kpi else None
+        if users_resp.status_code == 200 and kpis_resp.status_code == 200:
+            users_list = users_resp.json() if isinstance(users_resp.json(), list) else []
+            kpis_list = kpis_resp.json() if isinstance(kpis_resp.json(), list) else []
             
-            if user_id and kpi_id:
-                payload = {
-                    "user_id": int(user_id),
-                    "kpi_id": int(kpi_id),
-                    "custom_target_value": custom_target_value
-                }
+            # Re-fetch roles if not already available
+            if not roles_dict:
+                try:
+                    roles_resp = requests.get(f"{API_BASE}/roles", headers=api_headers())
+                    if roles_resp.status_code == 200:
+                        roles_data = roles_resp.json()
+                        roles_dict = {r.get('id'): r.get('name', 'Unknown') for r in roles_data} if isinstance(roles_data, list) else {}
+                except Exception:
+                    roles_dict = {}
+            
+            user_options = {f"{u.get('full_name', 'Unknown')} ({u.get('email', 'N/A')})": u.get('id') for u in users_list if u.get('id')}
+            kpi_options = {f"{k.get('name', 'Unknown')} (Role: {roles_dict.get(k.get('role_id'), 'Unknown')})": k.get('id') for k in kpis_list if k.get('id')}
+        
+            if user_options and kpi_options:
+                selected_user = st.selectbox("Select User", list(user_options.keys()))
+                selected_kpi = st.selectbox("Select KPI", list(kpi_options.keys()))
+                custom_target_value = st.number_input("Custom Target Value", min_value=0.01)
+                
+                override_submit = st.form_submit_button("Apply Override")
+                
+                if override_submit:
+                    user_id = user_options.get(selected_user) if selected_user else None
+                    kpi_id = kpi_options.get(selected_kpi) if selected_kpi else None
+                    
+                    if user_id and kpi_id:
+                        payload = {
+                            "user_id": int(user_id),
+                            "kpi_id": int(kpi_id),
+                            "custom_target_value": custom_target_value
+                        }
 
-                override_resp = requests.post(
-                    f"{API_BASE}/kpis/overrides/",
-                    json=payload,
-                    headers=api_headers()
-                )
+                        override_resp = requests.post(
+                            f"{API_BASE}/kpis/overrides/",
+                            json=payload,
+                            headers=api_headers()
+                        )
 
-                if override_resp.status_code == 200:
-                    st.success("KPI override applied successfully")
-                    st.rerun()
-                else:
-                    try:
-                        error = override_resp.json()
-                        st.error(error.get("detail", str(error)))
-                    except:
-                        st.error(override_resp.text)
+                        if override_resp.status_code == 200:
+                            st.success("KPI override applied successfully")
+                            st.rerun()
+                        else:
+                            try:
+                                error = override_resp.json()
+                                st.error(error.get("detail", str(error)))
+                            except:
+                                st.error(override_resp.text)
+                    else:
+                        st.error("Please select both user and KPI")
             else:
-                st.error("Please select both user and KPI")
-    else:
-        st.error("Failed to load users or KPIs")
+                st.warning("No users or KPIs available for override")
+        else:
+            st.error("Failed to load users or KPIs. Please check your connection.")
+    except Exception as e:
+        st.error(f"Error loading data: {str(e)}")
